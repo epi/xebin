@@ -9,10 +9,10 @@ AUTO_D = fp21depktab.d
 SOURCES = flashpack.d binary.d xebin.d
 
 OS := $(shell uname -s)
-ifeq (,$(findstring windows,$(OS)))
+ifneq (,$(findstring windows,$(OS)))
+EXESUFFIX=.exe
 else
-ifeq (,$(findstring Cygwin,$(OS)))
-else
+ifneq (,$(findstring Cygwin,$(OS)))
 EXESUFFIX=.exe
 endif
 endif
