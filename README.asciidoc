@@ -4,11 +4,11 @@ xebin - Atari XL/XE Binary File Utility
 // This file is in AsciiDoc format. It is the source for README.html.
 :Compact-Option:
 
-xebin is a small command-line utility for manipulating atari binary (executable) files.
++xebin+ is a small command-line utility for manipulating atari binary (executable) files.
 It can list contents of binary file, merge several files into a single loadable file,
 or pack file in a way similar to Piotr Fusik's FlashPack.
 
-xebin is written in http://www.digitalmars.com/d/2.0/[D programming language] and tested
++xebin+ is written in http://www.digitalmars.com/d/2.0/[D programming language] and tested
 under Windows and Linux (x86). However, it should be possible to build and run it on any
 platform, for which D compiler is available.
 It is designed to be easily embeddable in build scripts.
@@ -16,8 +16,8 @@ It is designed to be easily embeddable in build scripts.
 Installation
 ------------
 
-You need http://xasm.atari.org[xasm] and http://www.digitalmars.com/d/download.html[DMD 2.047],
-http://www.perl.org/get.html[Perl] and a GNU compatible make to build xebin.
+You need http://xasm.atari.org[xasm], http://www.digitalmars.com/d/download.html[DMD 2.047], and
+http://www.perl.org/get.html[Perl] and a GNU compatible make to build +xebin+.
 
 Go to console window, and, depending on your operating system, type
 
@@ -31,14 +31,68 @@ or simply
 $ make
 --------------
 
+After successful build, you can move file +xebin.exe+ or +xebin+ to a directory within your +PATH+.
+
 If you like hacking, you can easily do without make, and you can use different D compiler
 or even different assembler.
 
 Usage
 -----
 
-TBD
+A general syntax is:
 
+----------------------------
+$ xebin command [options] [input_files]
+----------------------------
+
+For all specific commands below you can skip input files specification.
+In such case, +xebin+ will read from standard input.
+
+Similarly, +xebin+ writes its output to standard output, but you can (and usually
+you should) specify an output file name with +-o+ or +--output+ option.
+When using +-v+ or +--verbose+ option, additional output is always written to
++stdout+.
+
+You can see the list of available commands and options by typing:
+
+----------------------------
+$ xebin help
+----------------------------
+
+Listing binary file contents
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+----------------------------
+$ xebin l[ist] [input_files]
+----------------------------
+
+An example output:
+
+-------------------------------------
+D:\proj\tipview>xebin l tv10.xex
+  0. 8C00-903C (043D)
+  1. 91DD-A3B7 (11DB)
+  2. Run 91FD
+-------------------------------------
+
+Compressing binary file
+~~~~~~~~~~~~~~~~~~~~~~~
+
+----------------------------
+$ xebin p[ack] [-a ad] [-s] [-o fn] [-v]
+----------------------------
+
+The command compresses a binary file using FlashPack algorithm. For each group of
+blocks between Init and Run blocks, it creates a single packed block with its own
+depacker. Init and Run blocks are copied unchanged.
+
++xebin+ tries to determine address of packed block so it won't collide with
+unpacked blocks. You can override its guess, or just give it a hand when it fails
+to do so, by using +-a+ or +--address+ option.
+
++-s+ or +--disable-os$ will cause the interrupts and OS ROM be disabled during depacking.
+Apart from an unnoticeable speed-up, it makes it possible to place unpacked blocks in areas
+of RAM normally hidden under OS ROM.
 
 Bugs
 ----
