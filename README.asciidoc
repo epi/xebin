@@ -1,0 +1,34 @@
+xebin - Atari XL/XE Binary File Utility
+=======================================
+
+// This file is in AsciiDoc format. It is the source for README.html.
+:Compact-Option:
+
+xebin is a small command-line utility for manipulating atari binary (executable) files.
+It can list contents of binary file, merge several files into a single loadable file,
+or pack file in a way similar to Piotr Fusik's FlashPack.
+
+xebin is written in http://www.digitalmars.com/d/2.0/[D programming language] and tested
+under Windows and Linux (x86). However, it should be possible to build and run it on any
+platform, for which D compiler is available.
+It is designed to be easily embeddable in build scripts.
+
+Usage
+-----
+
+TBD
+
+Bugs
+----
+
+It is impossible to set different addresses for multiple input files in pack option,
+as well as different settings for OS ROM and interrupts.
+
+Authors
+-------
+
+Piotr Fusik::
+Original FlashPack program, depacker routine.
+
+Adrian Matoga::
+Programming.
