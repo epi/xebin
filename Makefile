@@ -8,12 +8,22 @@ TABLES = fp21depk.tab fp21depk_noint.tab
 AUTO_D = fp21depktab.d
 SOURCES = flashpack.d binary.d xebin.d
 
-all: xebin.exe
+OS := $(shell uname -s)
+ifeq (,$(findstring windows,$(OS)))
+else
+ifeq (,$(findstring Cygwin,$(OS)))
+else
+EXESUFFIX=.exe
+endif
+endif
+XEBIN_EXE=xebin$(EXESUFFIX)
+
+all: $(XEBIN_EXE)
 
 debug:
-	$(MAKE) DC="dmd -unittest -debug -of$$@"
+	$(MAKE) DC="dmd -unittest -debug -of$(XEBIN_EXE)"
 
-xebin.exe: $(SOURCES) $(AUTO_D) $(OBX)
+$(XEBIN_EXE): $(SOURCES) $(AUTO_D) $(OBX)
 	$(DC) $(SOURCES) $(AUTO_D) -J.
 
 fp21depktab.d: tab2d.pl $(TABLES:.tab=.obx)
@@ -26,4 +36,5 @@ fp21depk_noint.obx fp21depk_noint.tab: fp21depk.asx
 	$(XASM_TAB) -d NO_INT=1
 
 clean:
-	$(RM) xebin.exe $(SOURCES:.d=.obj) $(SOURCES:.d=.map) $(OBX) $(TABLES) $(AUTO_D) $(AUTO_D:.d=.obj) $(AUTO_D:.d=.map)
+	$(RM) $(XEBIN_EXE) xebin.o $(SOURCES:.d=.obj) $(SOURCES:.d=.map) $(OBX) $(TABLES) $(AUTO_D) $(AUTO_D:.d=.obj) $(AUTO_D:.d=.map)
+
