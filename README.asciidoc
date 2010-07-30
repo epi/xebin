@@ -13,10 +13,32 @@ under Windows and Linux (x86). However, it should be possible to build and run i
 platform, for which D compiler is available.
 It is designed to be easily embeddable in build scripts.
 
+Installation
+------------
+
+You need http://xasm.atari.org[xasm] and http://www.digitalmars.com/d/download.html[DMD 2.047],
+http://www.perl.org/get.html[Perl] and a GNU compatible make to build xebin.
+
+Go to console window, and, depending on your operating system, type
+
+--------------
+> mingw32-make
+--------------
+
+or simply
+
+--------------
+$ make
+--------------
+
+If you like hacking, you can easily do without make, and you can use different D compiler
+or even different assembler.
+
 Usage
 -----
 
 TBD
+
 
 Bugs
 ----
@@ -32,3 +54,4 @@ Original FlashPack program, depacker routine.
 
 Adrian Matoga::
 Programming.
+
