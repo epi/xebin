@@ -16,6 +16,7 @@ It is designed to be easily embeddable in build scripts.
 Installation
 ------------
 
+You can download the newest source of xebin from http://github.com/epi/xebin[github].
 Windows executable for preview may (or may not) be present http://epi.atari8.info/files/xebin.zip[here].
 
 You need http://xasm.atari.org[xasm], http://www.digitalmars.com/d/download.html[DMD 2.047], and
@@ -137,7 +138,8 @@ as well as different settings for OS ROM and interrupts.
 Feedback
 --------
 
-Send bug reports, patches and feature requests to +epi at atari8 dot info+.
+Recommended way to report any issues concerning +xebin+ is to use http://github.com/epi/xebin/issues[this tracker].
+You can also send bug reports, patches and feature requests to +epi at atari8 dot info+.
 
 Authors
 -------
