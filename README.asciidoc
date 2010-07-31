@@ -16,6 +16,8 @@ It is designed to be easily embeddable in build scripts.
 Installation
 ------------
 
+Windows executable for preview may (or may not) be present http://epi.atari8.info/files/xebin.zip[here].
+
 You need http://xasm.atari.org[xasm], http://www.digitalmars.com/d/download.html[DMD 2.047], and
 http://www.perl.org/get.html[Perl] and a GNU compatible make to build +xebin+.
 
