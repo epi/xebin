@@ -45,6 +45,9 @@ A general syntax is:
 $ xebin command [options] [input_files]
 ----------------------------
 
+You can place options wherever you wish in the command line, as well as join
+single-letter options together, if they do not require parameters.
+
 For all specific commands below you can skip input files specification.
 In such case, +xebin+ will read from standard input.
 
@@ -75,11 +78,25 @@ D:\proj\tipview>xebin l tv10.xex
   2. Run 91FD
 -------------------------------------
 
+Merging two or more files
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+----------------------------
+$ xebin m[erge] [-o fn] [-v] [input_files]
+----------------------------
+
+Blocks from all files are concatenated in the order they appear in the list
+of input files.
+
+Reduntant +FFFF+ headers are dropped. 
+
++-v+ displays layout of resulting file.
+
 Compressing binary file
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 ----------------------------
-$ xebin p[ack] [-a ad] [-s] [-o fn] [-v]
+$ xebin p[ack] [-a ad] [-s] [-o fn] [-v] [input_files]
 ----------------------------
 
 The command compresses a binary file using FlashPack algorithm. For each group of
@@ -90,15 +107,35 @@ depacker. Init and Run blocks are copied unchanged.
 unpacked blocks. You can override its guess, or just give it a hand when it fails
 to do so, by using +-a+ or +--address+ option.
 
-+-s+ or +--disable-os$ will cause the interrupts and OS ROM be disabled during depacking.
++-s+ or +--disable-os+ will cause the interrupts and OS ROM be disabled during depacking.
 Apart from an unnoticeable speed-up, it makes it possible to place unpacked blocks in areas
 of RAM normally hidden under OS ROM.
+
++-v+ displays layout of resulting file.
+
+Unpacking binary file
+~~~~~~~~~~~~~~~~~~~~~
+
++xebin+ can also unpack FlashPack-compressed files. It handles files created by
+both Piotr Fusik's FlashPack and +xebin+ itself.
+
+----------------------------
+$ xebin u[npack] [-o fn] [-v] [input_files]
+----------------------------
+
++-v+ displays layout of resulting file.
+
 
 Bugs
 ----
 
 It is impossible to set different addresses for multiple input files in pack option,
 as well as different settings for OS ROM and interrupts.
+
+Feedback
+--------
+
+Send bug reports, patches and feature requests to +epi at atari8 dot info+.
 
 Authors
 -------
@@ -108,4 +145,23 @@ Original FlashPack program, depacker routine.
 
 Adrian Matoga::
 Programming.
+
+License
+-------
+
+------------------------------------
+Poetic License:
+
+This work 'as-is' we provide.
+No warranty express or implied.
+We've done our best,
+to debug and test.
+Liability for damages denied.
+
+Permission is granted hereby,
+to copy, share, and modify.
+Use as is fit,
+free or for profit.
+These rights, on this notice, rely.
+------------------------------------
 

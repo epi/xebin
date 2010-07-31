@@ -1,3 +1,25 @@
+/*	(Written in D programming language)
+
+	xebin - Atari XL/XE Binary File Utility
+	Command line interface for modules binary and flashpack.
+
+	Author: Adrian Matoga epi@atari8.info
+	
+	Poetic License:
+
+	This work 'as-is' we provide.
+	No warranty express or implied.
+	We've done our best,
+	to debug and test.
+	Liability for damages denied.
+
+	Permission is granted hereby,
+	to copy, share, and modify.
+	Use as is fit,
+	free or for profit.
+	These rights, on this notice, rely.
+*/
+
 import std.stdio;
 import std.string;
 import std.conv;
