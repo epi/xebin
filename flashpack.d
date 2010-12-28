@@ -22,7 +22,7 @@
 
 import std.stdio;
 import std.stream;
-import std.contracts;
+import std.exception;
 import std.string;
 import std.algorithm;
 import std.range;
