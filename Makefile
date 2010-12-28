@@ -11,10 +11,12 @@ SOURCES = flashpack.d binary.d xebin.d
 OS := $(shell uname -s)
 ifneq (,$(findstring windows,$(OS)))
 EXESUFFIX=.exe
-else
+endif
 ifneq (,$(findstring Cygwin,$(OS)))
 EXESUFFIX=.exe
 endif
+ifneq (,$(findstring MINGW,$(OS)))
+EXESUFFIX=.exe
 endif
 XEBIN_EXE=xebin$(EXESUFFIX)
 
@@ -38,3 +40,4 @@ fp21depk_noint.obx fp21depk_noint.tab: fp21depk.asx
 clean:
 	$(RM) $(XEBIN_EXE) xebin.o $(SOURCES:.d=.obj) $(SOURCES:.d=.map) $(OBX) $(TABLES) $(AUTO_D) $(AUTO_D:.d=.obj) $(AUTO_D:.d=.map)
 
+.DELETE_ON_ERROR:
