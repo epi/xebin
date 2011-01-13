@@ -16,8 +16,8 @@ It is designed to be easily embeddable in build scripts.
 Installation
 ------------
 
-You can download the newest source of xebin from http://github.com/epi/xebin[github].
-Windows executable for preview may (or may not) be present http://epi.atari8.info/files/xebin.zip[here].
+If you are using Windows, you may get the most recent binary release from github downloads.
+For other platforms you can find source of xebin from http://github.com/epi/xebin[github].
 
 You need http://xasm.atari.org[xasm], http://www.digitalmars.com/d/download.html[DMD 2.051], and
 http://www.perl.org/get.html[Perl] and a GNU compatible make to build +xebin+.

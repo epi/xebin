@@ -34,6 +34,8 @@ bool verbose;
 string outputFile;
 bool disableOs;
 
+immutable VERSION_STRING = "1.0.0";
+
 File openOutputFile()
 {
 	if (outputFile.length)
@@ -108,7 +110,7 @@ void pack(string[] args)
 void printHelp(string[] args)
 {
 	debug {} else write(
-		"Atari XL/XE binary file utility\n" ~
+		"Atari XL/XE binary file utility " ~ VERSION_STRING ~ "\n" ~
 		"\nUsage:\n" ~
 		args[0] ~ " command [options] [input_file ...]\n" ~
 		"\nThe following commands are available:\n" ~

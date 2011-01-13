@@ -4,7 +4,8 @@
 	binary executables using FlashPack format.
 
 	Author: Adrian Matoga epi@atari8.info
-	
+	Based on Piotr Fusik's FlashPack
+
 	Poetic License:
 
 	This work 'as-is' we provide.
