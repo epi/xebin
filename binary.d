@@ -21,6 +21,7 @@
 
 import std.stdio;
 import std.string;
+import std.conv;
 
 ushort toUshort(ubyte[] tab)
 {
@@ -142,7 +143,10 @@ struct BinaryFileReader
 		}
 		
 		auto result = BinaryBlock(start);
-		result.data.length = end - start + 1;
+		if (end - start + 1 > 0)
+			result.data.length = end - start + 1;
+		else
+			throw new Exception("End address lesser than start address");
 		
 		if (file_.rawRead(result.data).length != result.data.length)
 			throw new Exception("Unexpected end of file");
@@ -153,8 +157,15 @@ struct BinaryFileReader
 	BinaryBlock[] readFile()
 	{
 		BinaryBlock[] result;
-		while (file_.tell() < length_)
-			result ~= readBlock();
+		try
+		{
+			while (file_.tell() < length_)
+				result ~= readBlock();
+		}
+		catch (Exception e)
+		{
+			throw new Exception(e.msg ~ " (at block #" ~ to!string(result.length + 1) ~ ")");
+		}
 		return result;
 	}
 
