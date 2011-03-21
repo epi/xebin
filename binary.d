@@ -48,12 +48,12 @@ struct BinaryBlock
 
 	@property bool isRun()
 	{
-		return addr == 0x2E0 && data.length == 2;
+		return addr == 0x2E0 && (data.length == 2 || data.length == 4);
 	}
 	
 	@property bool isInit()
 	{
-		return addr == 0x2E2 && data.length == 2;
+		return (addr == 0x2E2 && data.length == 2) || (addr == 0x2E0 && data.length == 4);
 	}
 
 	@property size_t length()
@@ -66,12 +66,26 @@ struct BinaryBlock
 		return BinaryBlock(addr, data.dup);
 	}
 
+	@property ushort initAddress()
+	{
+		if (!isInit)
+			throw new Exception("Not an init block");
+		return toUshort(data[0x2E2 - addr .. 0x2E2 - addr + 2]);
+	}
+
+	@property ushort runAddress()
+	{
+		if (!isRun)
+			throw new Exception("Not a run block");
+		return toUshort(data[0x2E0 - addr .. 0x2E0 - addr + 2]);
+	}
+
 	string toString()
 	{
-		if (isRun)
-			return format("Run %04X", toUshort(data[addr - 0x2E0 .. addr - 0x2E0 + 2]));
-		if (isInit)
-			return format("Init %04X", toUshort(data[addr - 0x2E2 .. addr - 0x2E2 + 2]));
+		if (isInit || isRun)
+			return 
+				(isInit ? format("Init %04X" ~ (isRun ? ", " : ""), initAddress) : "")
+				~ (isRun ? format("Run %04X", runAddress) : "");
 		return format("%04X-%04X (%04X)%s", addr, addr + data.length - 1, data.length, isValid ? "" : " (Invalid!)");
 	}
 	
@@ -100,10 +114,19 @@ struct BinaryBlock
 		assert(run.isRun);
 		assert(!run.isInit);
 		assert(run.toBytes(true) == [ 0xFF, 0xFF, 0xE0, 0x02, 0xE1, 0x02, 0x34, 0x12 ]);
+		assert(run.toString() == "Run 1234");
+		
 		auto ini = BinaryBlock(0x2E2, [ 0xCD, 0xAB ]);
 		assert(ini.isInit);
 		assert(!ini.isRun);
 		assert(ini.toBytes(false) == [ 0xE2, 0x02, 0xE3, 0x02, 0xCD, 0xAB ]);
+		assert(ini.toString() == "Init ABCD");
+		
+		auto runini = BinaryBlock(0x2E0, [ 0xEF, 0x34, 0x56, 0x78 ]);
+		assert(runini.isInit);
+		assert(runini.isRun);
+		assert(runini.toBytes(true) == [ 0xFF, 0xFF, 0xE0, 0x02, 0xE3, 0x02, 0xEF, 0x34, 0x56, 0x78 ]);
+		assert(runini.toString() == "Init 7856, Run 34EF");
 	}
 }
 
