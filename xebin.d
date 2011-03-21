@@ -22,6 +22,7 @@
 
 import std.stdio;
 import std.string;
+import std.ctype;
 import std.conv;
 import std.getopt;
 
@@ -29,12 +30,12 @@ import binary;
 import flashpack;
 
 int address = 0xffff;
-int position;
+//int position;
 bool verbose;
 string outputFile;
 bool disableOs;
 
-immutable VERSION_STRING = "1.0.0";
+immutable VERSION_STRING = "1.0.1";
 
 File openOutputFile()
 {
@@ -116,32 +117,78 @@ void printHelp(string[] args)
 		"\nThe following commands are available:\n" ~
 		" l[ist]                              list blocks inside file\n" ~
 		" m[erge]                             merge input files into single file\n" ~
-		" p[ack]   [-a ad] [-s] [-o fn] [-v]  pack using FlashPack algorithm\n" ~
-		" u[npack] [-o fn]                    unpack FlashPack'd file\n" ~
+		" p[ack]   [-a=ad] [-s] [-o=fn] [-v]  pack using FlashPack algorithm\n" ~
+		" u[npack] [-o=fn]                    unpack FlashPack'd file\n" ~
 		" h[elp]                              print this message\n" ~
 		"\nOptions:\n" ~
-		" -o|--output fn           set output file name to fn (defaults to stdout)\n" ~
-		" -a|--address [-]ad       set packed/boxed data address to ad\n" ~
+		" -o|--output=fn           set output file name to fn (defaults to stdout)\n" ~
+//		" -a|--address=[-]ad       set packed/boxed data address to ad\n" ~
+		" -a|--address=[-]ad       set packed data address to ad\n" ~
 		"                          (use '-' for end address)\n" ~
-		" -n|--position pos        set block position for extract, delete, insert\n" ~
-		"                          (indexed from 0)\n" ~
+//		" -n|--position=pos        set block position for extract, delete, insert\n" ~
+//		"                          (indexed from 0)\n" ~
 		" -s|--disable-os          make depacker running with OS ROM disabled\n" ~
 		" -v|--verbose             emit some junk to stdout (requires output file\n" ~
-		"                          to be specified)\n"
-		"\nIf input file is not specified, stdin is used as input\n"
+		"                          to be specified)\n" ~
+		"\nIf input file is not specified, stdin is used as input\n" ~
+		"\n'=' character between option name and its parameter may be skipped\n"
 		);
+}
+
+int parseInt(string n)
+{
+	bool minus;
+	uint base = 10;
+	int result;
+
+	if (n.startsWith('-'))
+	{
+		n = n[1 .. $];
+		minus = true;
+	}
+	if (n.startsWith('$'))
+	{
+		n = n[1 .. $];
+		base = 16;
+	}
+	else if (n.startsWith("0x") || n.startsWith("0X"))
+	{
+		n = n[2 .. $];
+		base = 16;
+	}
+	
+	foreach (k; n)
+	{
+		uint digit = uint.max;
+		char c = to!char(toupper(k));
+		if (c >= '0' && c <= '9')
+			digit = c - '0';
+		else if (c >= 'A' && c <= 'Z')
+			digit = c - ('A' - 10);
+		if (digit >= base)
+			throw new Exception("Invalid number");
+		
+		result = result * base + digit;
+	}
+	
+	return minus ? -result : result;
 }
 
 int main(string[] args)
 {
+	string strAddr;
+
 	getopt(args,
 		config.caseSensitive,
-		config.bundling,
+		config.noBundling,
 		"s|disable-os", &disableOs,
-		"a|address", &address,
-		"n|position", &position,
+		"a|address", &strAddr,
+//		"n|position", &position,
 		"v|verbose", &verbose,
 		"o|output", &outputFile);
+
+	if (strAddr !is null)
+		address = parseInt(strAddr);
 
 	if (args.length > 2)
 	{
