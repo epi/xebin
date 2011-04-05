@@ -13,14 +13,13 @@ under Windows and Linux (x86). However, it should be possible to build and run i
 platform, for which D compiler is available.
 It is designed to be easily embeddable in build scripts.
 
+
 Installation
 ------------
 
-If you are using Windows, you may get the most recent binary release from github downloads.
-For other platforms you can find source of xebin from http://github.com/epi/xebin[github].
+Both binary releases for Windows and sources for all platforms are available at http://github.com/epi/xebin[github].
 
-You need http://xasm.atari.org[xasm], http://www.digitalmars.com/d/download.html[DMD 2.051], and
-http://www.perl.org/get.html[Perl] and a GNU compatible make to build +xebin+.
+To build +xebin+ from sources you need http://www.digitalmars.com/d/download.html[DMD 2.052] and a GNU compatible make.
 
 Go to console window, and, depending on your operating system, type
 
@@ -36,8 +35,8 @@ $ make
 
 After successful build, you can move file +xebin.exe+ or +xebin+ to a directory within your +PATH+.
 
-If you like hacking, you can easily do without make, and you can use different D compiler
-or even different assembler.
+If you like hacking, you can easily do without make, and you can use different D compiler.
+
 
 Usage
 -----
@@ -85,7 +84,7 @@ Merging two or more files
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ----------------------------
-$ xebin m[erge] [-o fn] [-v] [input_files]
+$ xebin m[erge] [-o=fn] [-v] [input_files]
 ----------------------------
 
 Blocks from all files are concatenated in the order they appear in the list
@@ -95,11 +94,28 @@ Reduntant +FFFF+ headers are dropped.
 
 +-v+ displays layout of resulting file.
 
+Extracting block from binary file
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+----------------------------
+$ xebin e[xtract] [-n=pos] [-r] [-o=fn] [-v] [input_files]
+----------------------------
+
+Default option is to extract first block of first input file, including its binary header.
+
+Option +-n=pos+ or +--position=pos+ allows extracting other blocks.
+Block numbering is continuous across all input files and starts from 0.
+Only one block is extracted at a time.
+
+Option +-r+ or +--raw+ strips header from extracted block.
+
++-v+ displays info about extracted block.
+
 Compressing binary file
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 ----------------------------
-$ xebin p[ack] [-a ad] [-s] [-o fn] [-v] [input_files]
+$ xebin p[ack] [-a=ad] [-s] [-o=fn] [-v] [input_files]
 ----------------------------
 
 The command compresses a binary file using FlashPack algorithm. For each group of
@@ -108,10 +124,12 @@ depacker. Init and Run blocks are copied unchanged.
 
 +xebin+ tries to determine address of packed block so it won't collide with
 unpacked blocks. You can override its guess, or just give it a hand when it fails
-to do so, by using +-a+ or +--address+ option.
+to do so, by using +-a=ad+ or +--address=ad+ option. Address may be supplied
+in decimal or hexadecimal (with +0x+ or +$+ prefix) notation. Address prefixed
+with +-+ is treated as address of the last byte of packed block.
 
 +-s+ or +--disable-os+ will cause the interrupts and OS ROM be disabled during depacking.
-Apart from an unnoticeable speed-up, it makes it possible to place unpacked blocks in areas
+Apart from an unnoticeable speed-up, it allows for placing unpacked blocks in areas
 of RAM normally hidden under OS ROM.
 
 +-v+ displays layout of resulting file.
@@ -120,13 +138,29 @@ Unpacking binary file
 ~~~~~~~~~~~~~~~~~~~~~
 
 +xebin+ can also unpack FlashPack-compressed files. It handles files created by
-both Piotr Fusik's FlashPack and +xebin+ itself.
+Piotr Fusik's FlashPack 1.0 or 2.1, or +xebin+ itself.
 
 ----------------------------
-$ xebin u[npack] [-o fn] [-v] [input_files]
+$ xebin u[npack] [-o=fn] [-v] [input_files]
 ----------------------------
 
 +-v+ displays layout of resulting file.
+
+
+History
+-------
+
+xebin 1.0.1 (2011-04-??)::
+
+Command line options and parameters work according to description.
+Support for hexadecimal address added.
+Added simple disassembler.
+Build process simplified by incorporating xasm in xebin.
+Added option to extract block from binary file.
+
+xebin 1.0.0 (2011-01-13)::
+
+Initial release.
 
 
 Bugs
@@ -135,20 +169,23 @@ Bugs
 It is impossible to set different addresses for multiple input files in pack option,
 as well as different settings for OS ROM and interrupts.
 
+
 Feedback
 --------
 
 Recommended way to report any issues concerning +xebin+ is to use http://github.com/epi/xebin/issues[this tracker].
 You can also send bug reports, patches and feature requests to +epi at atari8 dot info+.
 
+
 Authors
 -------
 
 Piotr Fusik::
-Original FlashPack program, depacker routine.
+Original FlashPack program, depacker routines.
 
 Adrian Matoga::
 Programming.
+
 
 License
 -------
@@ -168,4 +205,3 @@ Use as is fit,
 free or for profit.
 These rights, on this notice, rely.
 ------------------------------------
-
