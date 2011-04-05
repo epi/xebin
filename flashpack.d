@@ -29,7 +29,6 @@ import std.algorithm;
 import std.range;
 import std.typecons;
 
-import fp21depktab;
 import binary;
 import xasm;
 
