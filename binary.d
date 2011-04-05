@@ -36,6 +36,16 @@ ubyte[] toBytes(ushort sh)
 	return tab;
 }
 
+BinaryBlock makeInitBlock(ushort addr)
+{
+	return BinaryBlock(0x2e2, toBytes(addr));
+}
+
+BinaryBlock makeRunBlock(ushort addr)
+{
+	return BinaryBlock(0x2e0, toBytes(addr));
+}
+
 struct BinaryBlock
 {
 	ushort addr;
@@ -110,6 +120,7 @@ struct BinaryBlock
 
 	unittest
 	{
+		debug writeln("unittest BinaryBlock");
 		auto run = BinaryBlock(0x2E0, [ 0x34, 0x12 ]);
 		assert(run.isRun);
 		assert(!run.isInit);
