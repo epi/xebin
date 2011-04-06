@@ -63,9 +63,10 @@ BinaryBlock[] flashPack(BinaryBlock[] blocks, bool disableOs = false, ushort add
 			j = i + 1;
 		}
 	}
+	// blocks at the end without init / run
 	if (j - blocks.length > 0)
 		result ~= packBlock(blocks[j .. blocks.length], disableOs, addr, endaddr);
-	
+
 	return result;
 }
 
@@ -277,12 +278,16 @@ ubyte[] toBytes(Item[] items)
 BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort addr = 0xffff, bool endaddr = false)
 {
 	auto result = BinaryBlock(0, blocks.toItems().toBytes());
-	
 	// auto set addr
 	size_t packedLength = result.length + (disableOs ? DepackerLength.FLASHPACK_21_OS_DISABLED : DepackerLength.FLASHPACK_21);
 	if (addr == 0xffff)
 	{
-		auto sblocks = remove!"a.addr > 0xbc20"(blocks.dup) ~ [ BinaryBlock(0xbc00) ];
+		auto b = BinaryBlock(0xbc20);
+		b.data ~= 0;
+		auto sblocks = blocks ~ b;
+		b = BinaryBlock(0x1000);
+		b.data ~= 0;
+		sblocks ~= b;
 		sort!"a.addr > b.addr"(sblocks);
 		foreach (i, ref blk; sblocks[1 .. $])
 		{
@@ -300,7 +305,7 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 		addr = cast(ushort) (addr - packedLength + 1);
 	result.addr = addr;
 
-	// apend depacker
+	// append depacker
 	auto xasm = new Xasm;
 	xasm.defineLabel("ADDRESS", result.addr);
 	xasm.defineLabel("CODEADDR", result.addr + result.length);
