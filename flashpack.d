@@ -412,12 +412,18 @@ BinaryBlock[] unpackBlock10(BinaryBlock input)
 	BinaryBlock[] result;
 
 	ushort din = cast(ushort) (input.addr + 0x5e);
+	ushort dinEnd = cast(ushort) (input.addr + input.length);
 	ushort dout;
 	ubyte[] mem = new ubyte[65536];
 	with (input)
 		mem[addr .. addr + data.length] = data;
 
-	ubyte get() { return mem[din++]; }
+	ubyte get()
+	{
+		if (din >= dinEnd)
+			throw new FlashPackException("Error in packed data");
+		return mem[din++];
+	}
 
 	void put(ubyte a)
 	{
