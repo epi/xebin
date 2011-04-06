@@ -71,7 +71,7 @@ Listing binary file contents
 $ xebin l[ist] [input_files]
 ----------------------------
 
-An example output:
+Example output:
 
 -------------------------------------
 D:\proj\tipview>xebin l tv10.xex
@@ -79,6 +79,18 @@ D:\proj\tipview>xebin l tv10.xex
   1. 91DD-A3B7 (11DB)
   2. Run 91FD
 -------------------------------------
+
+With +-v+ contents of packed blocks are shown, e.g.:
+
+-------------------------------------
+D:\proj\fail\vrgb\xebin l vrgb10.xex
+  0. 4000-470E (070F) (FlashPack 1.0)
+      0. 3000-39A0 (09A1)
+      1. 3C21-3C48 (0028)
+      2. 3CC1-3CF1 (0031)
+      3. Run 3000
+  1. Init 4000
+--------------------------------------
 
 Merging two or more files
 ~~~~~~~~~~~~~~~~~~~~~~~~~

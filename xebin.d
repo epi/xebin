@@ -68,24 +68,36 @@ void list(string[] args)
 	foreach (file; InputFiles(args))
 	{
 		if (args.length > 3)
-			of.writeln(file.name, ":");
+			of.writefln("\n%s:", file.name);
 		auto blocks = BinaryFileReader(file).readFile();
 		foreach (i, blk; blocks)
 		{
 			of.writef("%3d. %s", i, blk);
-			switch (detectCompressionMethod(blocks[i .. $]))
+			with (CompressionMethod)
 			{
-			case CompressionMethod.FLASHPACK_10:
-				of.writeln(" (FlashPack 1.0)");
-				break;
-			case CompressionMethod.FLASHPACK_21:
-				of.writeln(" (FlashPack 2.1)");
-				break;
-			case CompressionMethod.FLASHPACK_21_OS_DISABLED:
-				of.writeln(" (FlashPack 2.1, OS ROM disabled)");
-				break;
-			default:
-				of.writeln();
+				auto cm = detectCompressionMethod(blocks[i .. $]);
+				switch (cm)
+				{
+				case FLASHPACK_10:
+					of.writeln(" (FlashPack 1.0)");
+					break;
+				case FLASHPACK_21:
+					of.writeln(" (FlashPack 2.1)");
+					break;
+				case FLASHPACK_21_OS_DISABLED:
+					of.writeln(" (FlashPack 2.1, OS ROM disabled)");
+					break;
+				default:
+					of.writeln();
+				}
+				if (verbose && (cm == FLASHPACK_10 || cm == FLASHPACK_21 || cm == FLASHPACK_21_OS_DISABLED))
+				{
+					auto unp = flashUnpack(blocks[i .. i + 2]);
+					foreach (j, ublk; unp)
+					{
+						writefln("    %3d. %s", j, ublk);
+					}
+				}
 			}
 		}
 			
