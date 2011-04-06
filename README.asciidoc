@@ -130,7 +130,8 @@ Disassembling binary file
 $ xebin d[isasm] [-o=fn] [input_files]
 ----------------------------
 
-Syntax is similar to used by http://atari800.sourceforge.net/[Atari 800] emulator.
+Generated output is compatible with http://atariarea.krap.pl/x-asm/[xasm], except for the "unofficial" 6502 opcodes.
+Opcode names and argument syntax are taken from http://atari800.sourceforge.net/[Atari 800] emulator.
 No labels are created -- absolute addresses are printed for all variables, jumps, etc.
 
 Compressing binary file
