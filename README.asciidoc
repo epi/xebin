@@ -154,7 +154,7 @@ with +-+ is treated as address of the last byte of packed block.
 Apart from an unnoticeable speed-up, it allows for placing unpacked blocks in areas
 of RAM normally hidden under OS ROM.
 
-+-v+ displays layout of resulting file.
++-v+ displays layout of resulting file and some statistics.
 
 Unpacking binary file
 ~~~~~~~~~~~~~~~~~~~~~

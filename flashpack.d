@@ -277,9 +277,11 @@ ubyte[] toBytes(Item[] items)
 
 BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort addr = 0xffff, bool endaddr = false)
 {
+	// pack
 	auto result = BinaryBlock(0, blocks.toItems().toBytes());
-	// auto set addr
 	size_t packedLength = result.length + (disableOs ? DepackerLength.FLASHPACK_21_OS_DISABLED : DepackerLength.FLASHPACK_21);
+	
+	// auto set addr
 	if (addr == 0xffff)
 	{
 		auto b = BinaryBlock(0xbc20);
@@ -301,6 +303,8 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	}
 	if (addr == 0xffff)
 		throw new FlashPackException("Cannot automatically set packed data address");
+
+	// set address
 	if (endaddr)
 		addr = cast(ushort) (addr - packedLength + 1);
 	result.addr = addr;

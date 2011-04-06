@@ -161,12 +161,32 @@ void unpack(string[] args)
 	listAndSaveResult(result);
 }
 
+long getSize(BinaryBlock[] blocks)
+{
+	long result = 2; // FFFF header
+	foreach (blk; blocks)
+		result += 4 + blk.length;
+	return result;
+}
+
 void pack(string[] args)
 {
 	BinaryBlock[] result;
+	long unpackedSize;
 	foreach (file; InputFiles(args))
-		result ~= flashPack(BinaryFileReader(file).readFile(), disableOs, cast(ushort) (address < 0 ? -address : address), address < 0);
+	{
+		auto inblocks = BinaryFileReader(file).readFile();
+		unpackedSize += inblocks.getSize();
+		result ~= flashPack(inblocks, disableOs, cast(ushort) (address < 0 ? -address : address), address < 0);
+	}
 	listAndSaveResult(result);
+	long packedSize = result.getSize();
+	if (verbose && outputFile.length)
+	{
+		writefln("\nInput:  %12d bytes", unpackedSize);
+		writefln(  "Packed: %12d bytes", packedSize);
+		writefln(  "Gain:   %12d %%", 100 - (packedSize * 100 / unpackedSize));
+	}
 }
 
 void disassembly(string[] args)
@@ -281,7 +301,7 @@ int main(string[] args)
 	if (strAddr !is null)
 		address = parseInt(strAddr);
 
-	if (args.length > 2)
+	if (args.length >= 2)
 	{
 		auto funcs = [
 			"help":&printHelp,
