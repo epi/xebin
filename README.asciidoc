@@ -180,6 +180,7 @@ Added support for hexadecimal addresses.
 Added simple disassembler.
 Added option to extract block from binary file.
 Added option to list contents of compressed blocks.
++xebin pack -v+ shows some statistics.
 Build process simplified by incorporating xasm in xebin.
 
 xebin 1.0.0 (2011-01-13)::

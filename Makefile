@@ -44,7 +44,7 @@ xebin-$(VERSION)-src.zip: xebin-$(VERSION)
 	$(RM) $@
 	$(ZIP) $<
 
-xebin-$(VERSION): $(SOURCES) tab2d.pl fp21depk.asx README.asciidoc makefile
+xebin-$(VERSION): $(SOURCES) README.asciidoc makefile
 	$(RM) -r $@
 	( mkdir xebin-$(VERSION) && cp $^ xebin-$(VERSION)/ )
 
