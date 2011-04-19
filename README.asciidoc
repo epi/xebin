@@ -173,7 +173,7 @@ $ xebin u[npack] [-o=fn] [-v] [input_files]
 History
 -------
 
-xebin 1.0.1 (2011-04-??)::
+xebin 1.1.0 (2011-04-20)::
 
 Fixed bug in auto address setting for packed data.
 Command line options and parameters work according to description.
@@ -207,7 +207,7 @@ Authors
 -------
 
 Piotr Fusik::
-Original FlashPack program, depacker routines.
+Original FlashPack program, depacker routines, testing.
 
 Adrian Matoga::
 Programming.

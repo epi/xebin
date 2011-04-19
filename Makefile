@@ -1,4 +1,4 @@
-VERSION = 1.0.1
+VERSION = 1.1.0
 SOURCES = flashpack.d binary.d disasm.d xasm.d xebin.d
 DMD = dmd -O -release -inline -of$@
 ASCIIDOC = asciidoc -o $@ -a doctime
