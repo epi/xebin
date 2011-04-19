@@ -44,15 +44,15 @@ xebin-$(VERSION)-src.zip: xebin-$(VERSION)
 	$(RM) $@
 	$(ZIP) $<
 
-xebin-$(VERSION): $(SOURCES) README.asciidoc makefile
+xebin-$(VERSION): $(SOURCES) README.asciidoc
 	$(RM) -r $@
-	( mkdir xebin-$(VERSION) && cp $^ xebin-$(VERSION)/ )
+	( mkdir xebin-$(VERSION) && cp $^ Makefile xebin-$(VERSION) )
 
 clean:
 	$(RM) $(XEBIN_EXE) xebin.o $(SOURCES:.d=.obj) $(SOURCES:.d=.map)
 	$(RM) xebin.html xebin-$(VERSION)-windows.zip xebin-$(VERSION)-src.zip
 	$(RM) -r xebin-$(VERSION)
 
-.PHONY: all doc debug windist srcdist clean
+.PHONY: all doc debug windist srcdist clean Makefile
 	
 .DELETE_ON_ERROR:
