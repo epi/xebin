@@ -78,12 +78,12 @@ BinaryBlock[] flashUnpack(BinaryBlock[] blocks)
 		switch (detectCompressionMethod(blocks))
 		{
 		case CompressionMethod.FLASHPACK_10:
-			result ~= unpackBlock10(blocks[0]);
+			result ~= unpackBlock(blocks[0], true);
 			blocks = blocks[2 .. $];
 			break;
 		case CompressionMethod.FLASHPACK_21:
 		case CompressionMethod.FLASHPACK_21_OS_DISABLED:
-			result ~= unpackBlock(blocks[0]);
+			result ~= unpackBlock(blocks[0], false);
 			blocks = blocks[2 .. $];
 			break;
 		default:
@@ -329,98 +329,11 @@ struct Bits
 	void popFront() { --l; f <<= 1; }
 }
 
-BinaryBlock[] unpackBlock(BinaryBlock input)
+BinaryBlock[] unpackBlock(BinaryBlock input, bool oldFormat = false)
 {
 	BinaryBlock[] result;
 
-	ubyte y;
-	ushort ad;
-	ushort din = input.addr;
-	ushort dout = 0x8080;
-	ubyte[] mem = new ubyte[65536];
-	with (input)
-		mem[addr .. addr + data.length] = data;
-	result ~= BinaryBlock(dout);
-
-	ubyte get() { return mem[din++]; }
-	void setAdL(ubyte a) { ad = cast(ushort) ((ad & 0xff00u) | a); }
-	void setAdH(ubyte a) { ad = cast(ushort) ((ad & 0xffu) | (a << 8)); }
-
-	void setBlockAddr()
-	{
-		if (result[$ - 1].length == 0)
-			result[$ - 1].addr = cast(ushort) (dout + y);
-		else
-			result ~= BinaryBlock(cast(ushort) (dout + y));
-	}
-	
-	void setPutH(ubyte a)
-	{
-		dout = cast(ushort) ((dout & 0xffu) | (a << 8));
-		setBlockAddr();
-	}
-
-	void put(ubyte a)
-	{
-		mem[dout + y] = a;
-		result[$ - 1].data ~= a;
-		++y;
-		if (y == 0)
-		{
-			ad += 0x100;
-			dout += 0x100;
-		}
-	}
-
-	for (;;)
-	{
-		foreach (ff; Bits(get()))
-		{
-			foreach (c; Bits(ff ? get() : 0))
-			{
-				ubyte a = get();
-				if (!c)
-					put(a);
-				else if (!a)
-				{
-					y = get();
-					setBlockAddr();
-					a = get();
-					setAdH(a);
-					setPutH(a);
-					put(get());
-				}
-				else
-				{
-					int x;
-					if (a & 0xfe)
-					{
-						x = 2 + (a & 1);
-						setAdL(a >>> 1);
-					}
-					else
-					{
-						x = get() + 2;
-						if (x == 2)
-							return result;
-						setAdL(0x7f);
-					}
-					enforce(x >= 2 && x <= 256);
-					do
-					{
-						put(mem[ad + y]);
-					} while (--x);
-				}
-			}
-		}
-	}
-}
-
-BinaryBlock[] unpackBlock10(BinaryBlock input)
-{
-	BinaryBlock[] result;
-
-	ushort din = cast(ushort) (input.addr + 0x5e);
+	ushort din = cast(ushort) (oldFormat ? input.addr + 0x5e : input.addr);
 	ushort dinEnd = cast(ushort) (input.addr + input.length);
 	ushort dout;
 	ubyte[] mem = new ubyte[65536];
@@ -471,6 +384,12 @@ BinaryBlock[] unpackBlock10(BinaryBlock input)
 						auto b = get();
 						if (a & 1)
 						{
+							if (!oldFormat)
+							{
+								if (!b)
+									return result;
+								b += 2;
+							}
 							auto dup = mem[dout + 0x7F];
 							foreach (i; 0 .. b)
 								put(dup);
