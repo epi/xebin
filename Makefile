@@ -21,6 +21,8 @@ all: $(XEBIN_EXE)
 
 doc: xebin.html
 
+dist: windist srcdist
+
 windist: xebin-$(VERSION)-windows.zip
 
 srcdist: xebin-$(VERSION)-src.zip
@@ -53,6 +55,6 @@ clean:
 	$(RM) xebin.html xebin-$(VERSION)-windows.zip xebin-$(VERSION)-src.zip
 	$(RM) -r xebin-$(VERSION)
 
-.PHONY: all doc debug windist srcdist clean Makefile
-	
+.PHONY: all doc debug dist windist srcdist clean
+
 .DELETE_ON_ERROR:
