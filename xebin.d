@@ -37,7 +37,7 @@ string outputFile;
 bool disableOs;
 bool removeHeader;
 
-immutable VERSION_STRING = "1.0.1";
+immutable VERSION_STRING = "1.1.0";
 
 File openOutputFile()
 {
