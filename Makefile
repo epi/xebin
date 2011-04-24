@@ -2,7 +2,7 @@ VERSION = 1.1.0
 SOURCES = flashpack.d binary.d disasm.d xasm.d xebin.d
 DMD = dmd -O -release -inline -of$@
 ASCIIDOC = asciidoc -o $@ -a doctime
-ASCIIDOC_POSTPROCESS = perl -pi.bak -e "END{unlink '$@.bak'}" $@
+ASCIIDOC_POSTPROCESS =
 ASCIIDOC_VALIDATE = xmllint --valid --noout --nonet $@
 ZIP = 7z a -mx=9 -tzip $@
 RM = rm -f
