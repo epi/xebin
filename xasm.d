@@ -929,7 +929,7 @@ private:
 				return;
 			}
 			readWord();
-			switch (c) {
+			final switch (c) {
 			case '#':
 				break;
 			case '<':
@@ -1274,6 +1274,8 @@ private:
 		case AddrMode.INDIRECT:
 			putWord(cast(ushort) value);
 			break;
+		default:
+			break;
 		}
 		switch (addrMode) {
 		case cast(AddrMode) (AddrMode.ABSOLUTE_X + AddrMode.INCREMENT):
@@ -1330,7 +1332,7 @@ private:
 	}
 
 	void addrModeForMove(int move) {
-		switch (move) {
+		final switch (move) {
 		case 0:
 			readAddrMode();
 			break;
@@ -1390,6 +1392,8 @@ private:
 				putWord(0x00a0);
 			}
 			putCommand(cast(ubyte) (b + 0x11));
+			break;
+		default:
 			break;
 		}
 	}
@@ -1761,6 +1765,8 @@ private:
 		case 'h':
 			putByte(cast(ubyte) (val >> 8));
 			break;
+		default:
+			break;
 		}
 	}
 
@@ -1951,6 +1957,8 @@ private:
 			case 'r':
 				assemblyDtaReal();
 				break;
+			default:
+				illegalCharacter();
 			}
 			switch (readChar()) {
 			case ')':
@@ -1997,7 +2005,7 @@ private:
 					break;
 				}
 				foreach (ubyte b; s) {
-					switch (b & 0x60) {
+					final switch (b & 0x60) {
 					case 0x00:
 						putByte(cast(ubyte) (b + 0x40));
 						break;

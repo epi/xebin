@@ -22,7 +22,7 @@
 
 import std.stdio;
 import std.string;
-import std.ctype;
+import std.ascii;
 import std.conv;
 import std.getopt;
 
@@ -267,10 +267,10 @@ int parseInt(string n)
 		base = 16;
 	}
 	
-	foreach (k; n)
+	foreach (k; n.toUpper())
 	{
 		uint digit = uint.max;
-		char c = to!char(toupper(k));
+		char c = to!char(k);
 		if (c >= '0' && c <= '9')
 			digit = c - '0';
 		else if (c >= 'A' && c <= 'Z')
