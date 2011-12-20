@@ -336,7 +336,7 @@ private:
 	ubyte[] objectBuffer;
 
 	@property int objectBytes() {
-		return objectBuffer.length;
+		return cast(int) objectBuffer.length;
 	}
 
 	void warning(in char[] msg, bool error = false) {
@@ -821,7 +821,7 @@ private:
 				}
 			}
 			for (;;) {
-				int sp = valOpStack.length - 1;
+				int sp = cast(int) (valOpStack.length - 1);
 				if (sp <= 0 || valOpStack[sp].priority > valOpStack[sp - 1].priority) {
 					break;
 				}
@@ -1153,7 +1153,7 @@ private:
 	}
 
 	int filenameExt(in char[] filename) {
-		int i = filename.length;
+		int i = cast(int) filename.length;
 		while (--i >= 0) {
 			switch (filename[i]) {
 			case '.':
@@ -1356,6 +1356,7 @@ private:
 		case AddrMode.ACCUMULATOR:
 		case AddrMode.INDIRECT:
 			illegalAddrMode();
+			goto case AddrMode.IMMEDIATE;
 		case AddrMode.IMMEDIATE:
 			if (b == 0x80) {
 				// STA #
@@ -2785,7 +2786,7 @@ private:
 		wereManyInstructions = false;
 		if (commandLineDefinitions.length > 0) {
 			foreach (definition; commandLineDefinitions) {
-				int i = indexOf(definition, '=');
+				int i = cast(int) indexOf(definition, '=');
 				assert(i >= 0);
 				line = definition[0 .. i] ~ " equ " ~ definition[i + 1 .. definition.length];
 				assemblyLine();
@@ -2808,7 +2809,7 @@ private:
 {
 	auto xasm = new Xasm;
 	xasm.assemblyString("
-	
+
 	opt h-
 	org $8000
 	lda #0
@@ -2817,7 +2818,7 @@ l1	sta l2,y-
 	bne l1
 l2	equ *
 	rts
-	
+
 		");
 	auto code = xasm.result;
 	writeln(code);

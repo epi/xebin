@@ -9,7 +9,7 @@ It can list contents of binary file, merge several files into a single loadable 
 or pack file in a way similar to Piotr Fusik's FlashPack.
 
 +xebin+ is written in http://www.digitalmars.com/d/2.0/[D programming language] and tested
-under Windows and Linux (x86). However, it should be possible to build and run it on any
+under Linux and, occasionally, Windows. However, it should be possible to build and run it on any
 platform, for which D compiler is available.
 It is designed to be easily embeddable in build scripts.
 
@@ -19,7 +19,7 @@ Installation
 
 Both binary releases for Windows and sources for all platforms are available at http://github.com/epi/xebin[github].
 
-To build +xebin+ from sources you need http://www.digitalmars.com/d/download.html[DMD 2.052] and a GNU compatible make.
+To build +xebin+ from sources, you need http://www.digitalmars.com/d/download.html[DMD 2.057] and a GNU compatible make.
 
 Go to console window, and, depending on your operating system, type
 

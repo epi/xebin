@@ -58,7 +58,7 @@ struct InputFiles
 	}
 
 	@property bool empty() { return !args.length; }
-	@property File front() { return args[0].length ? File(args[0]) : stdin; }
+	@property File front() { auto q = args[0].length ? File(args[0], "rb") : stdin; return q; }
 	void popFront() { args = args[1 .. $]; }
 }
 

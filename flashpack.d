@@ -52,7 +52,7 @@ BinaryBlock[] flashPack(BinaryBlock[] blocks, bool disableOs = false, ushort add
 {
 	BinaryBlock[] result;
 
-	int j = 0;
+	size_t j = 0;
 	foreach (i, ref blk; blocks)
 	{
 		if (blk.isRun || blk.isInit)
@@ -118,7 +118,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 		{
 			auto xasm = new Xasm;
 			xasm.defineLabel("ADDRESS", blk.addr);
-			xasm.defineLabel("CODEADDR", blk.addr + blk.length - DepackerLength.FLASHPACK_21);
+			xasm.defineLabel("CODEADDR", cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21));
 			xasm.defineLabel("OS_DISABLED", 0);
 			xasm.assemblyString(depackerSrc21);
 			if (xasm.result[] == blk.data[blk.length - DepackerLength.FLASHPACK_21 .. $])
@@ -129,7 +129,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 		{
 			auto xasm = new Xasm;
 			xasm.defineLabel("ADDRESS", blk.addr);
-			xasm.defineLabel("CODEADDR", blk.addr + blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED);
+			xasm.defineLabel("CODEADDR", cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED));
 			xasm.defineLabel("OS_DISABLED", 1);
 			xasm.assemblyString(depackerSrc21);
 			if (xasm.result[] == blk.data[blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED .. $])
@@ -170,7 +170,7 @@ Item[] toItems(BinaryBlock[] blocks)
 		ubyte[] src = block.data;
 
 		int[uint] seqs;
-		auto srcLength = src.length;
+		uint srcLength = cast(uint) src.length;
 		
 		struct SeqSearchResult { int dist; bool three; }
 
@@ -312,7 +312,7 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	// append depacker
 	auto xasm = new Xasm;
 	xasm.defineLabel("ADDRESS", result.addr);
-	xasm.defineLabel("CODEADDR", result.addr + result.length);
+	xasm.defineLabel("CODEADDR", cast(int) (result.addr + result.length));
 	xasm.defineLabel("OS_DISABLED", disableOs ? 1 : 0);
 	xasm.assemblyString(depackerSrc21);
 	result.data ~= xasm.result;
