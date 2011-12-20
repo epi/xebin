@@ -6,6 +6,7 @@ ASCIIDOC_POSTPROCESS =
 ASCIIDOC_VALIDATE = xmllint --valid --noout --nonet $@
 ZIP = 7z a -mx=9 -tzip $@
 RM = rm -f
+PREFIX = /usr/local
 
 ifdef ComSpec
 EXESUFFIX = .exe
@@ -54,6 +55,9 @@ clean:
 	$(RM) $(XEBIN_EXE) xebin.o $(SOURCES:.d=.obj) $(SOURCES:.d=.map)
 	$(RM) xebin.html xebin-$(VERSION)-windows.zip xebin-$(VERSION)-src.zip
 	$(RM) -r xebin-$(VERSION)
+
+install: $(XEBIN_EXE)
+	mkdir -p $(PREFIX)/bin && cp $(XEBIN_EXE) $(PREFIX)/bin/
 
 .PHONY: all doc debug dist windist srcdist clean
 
