@@ -37,7 +37,7 @@ $(XEBIN_EXE): $(SOURCES)
 xebin.html: README.asciidoc
 	$(ASCIIDOC) $<
 	$(ASCIIDOC_POSTPROCESS)
-	$(ASCIIDOC_VALIDATE)
+#	$(ASCIIDOC_VALIDATE)
 
 xebin-$(VERSION)-windows.zip: xebin.exe xebin.html
 	$(RM) $@
