@@ -195,15 +195,13 @@ void disassembly(string[] args)
 	foreach (file; InputFiles(args))
 	{
 		if (args.length > 3)
-			of.writeln(file.name, ":");
-		foreach (i, blk; BinaryFileReader(file).readFile())
+			of.writeln("; ", file.name, ":");
+		auto disasm = new Disassembler(BinaryFileReader(file).readFile());
+		foreach (blk; disasm[])
 		{
-			of.writefln("\n; %3d. %s", i, blk);
-			of.writefln("\n\torg $%04x\n", blk.addr);
-			foreach (k; new Disassembler(blk))
-			{
-				of.writefln("\t%s", k);
-			}
+			of.writefln("\n\torg $%04x\n", blk.front.addr);
+			foreach (ln; blk)
+				of.writefln("%s\t%s", ln.label, ln.instr);
 		}
 	}
 }
