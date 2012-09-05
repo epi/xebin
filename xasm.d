@@ -240,7 +240,7 @@ private:
 
 	Label currentLabel;
 
-	typedef int function(int a, int b) OperatorFunction;
+	alias int function(int a, int b) OperatorFunction;
 
 	bool inOpcode = false;
 
@@ -310,7 +310,7 @@ private:
 
 	bool wereManyInstructions;
 
-	typedef void delegate(int move) MoveFunction;
+	alias void delegate(int move) MoveFunction;
 
 	int value1;
 
