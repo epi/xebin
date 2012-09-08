@@ -1,5 +1,5 @@
 VERSION = 1.1.0
-SOURCES = flashpack.d binary.d disasm.d xasm.d xebin.d
+SOURCES = flashpack.d binary.d disasm.d vm.d xasm.d xebin.d
 DMD = dmd -O -release -inline -of$@
 ASCIIDOC = asciidoc -o $@ -a doctime
 ASCIIDOC_POSTPROCESS =

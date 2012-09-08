@@ -4,7 +4,7 @@
 	Command line interface for modules binary and flashpack.
 
 	Author: Adrian Matoga epi@atari8.info
-	
+
 	Poetic License:
 
 	This work 'as-is' we provide.
@@ -29,6 +29,7 @@ import std.getopt;
 import binary;
 import flashpack;
 import disasm;
+import vm;
 
 int address = 0xffff;
 int position;
@@ -206,6 +207,15 @@ void disassembly(string[] args)
 	}
 }
 
+void run(string[] args)
+{
+	auto blocks = BinaryFileReader(InputFiles(args).front).readFile();
+	auto v = new Vm();
+	v.ioTrace = ioTrace;
+	v.cpuTrace = cpuTrace;
+	v.loadAndRun(blocks);
+}
+
 void printHelp(string[] args)
 {
 	debug {} else write(
@@ -221,6 +231,7 @@ void printHelp(string[] args)
 		" i[nsert]  [-n=pos] [-a=ad] [-o=fn] [-v]  insert block into file\n" ~ 
 		" o[ptimize] [-o=fn] [-i]               optimize file\n +/
 		" d[isasm]  [-o=fn]                     disassemble blocks\n" ~
+		" r[un]                                 run in a simple virtual machine\n" ~
 		" p[ack]    [-a=ad] [-s] [-o=fn] [-v]   pack using FlashPack algorithm\n" ~
 		" u[npack]  [-o=fn] [-v]                unpack FlashPack'd file\n" ~
 		" h[elp]                                print this message\n" ~
@@ -282,6 +293,9 @@ int parseInt(string n)
 	return minus ? -result : result;
 }
 
+bool cpuTrace;
+bool ioTrace;
+
 int main(string[] args)
 {
 	string strAddr;
@@ -290,6 +304,8 @@ int main(string[] args)
 		config.caseSensitive,
 		config.noBundling,
 		"s|disable-os", &disableOs,
+		"trace-cpu", &cpuTrace,
+		"trace-cio", &ioTrace,
 		"a|address", &strAddr,
 		"n|position", &position,
 		"r|raw", &removeHeader,
@@ -308,7 +324,8 @@ int main(string[] args)
 			"merge":&merge,
 			"unpack":&unpack,
 			"pack":&pack,
-			"disasm":&disassembly
+			"disasm":&disassembly,
+			"run":&run
 			];
 		foreach (cmd, fun; funcs)
 		{
