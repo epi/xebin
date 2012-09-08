@@ -22,6 +22,7 @@
 import std.regex;
 import std.string;
 import std.conv;
+import std.exception;
 
 import binary;
 
@@ -33,6 +34,11 @@ struct AsmLine
 	ubyte argSize;
 	bool argIsAddr;
 	private Disassembler disasm_;
+
+	this(ushort addr, ubyte[] bytes)
+	{
+		this(null, addr, bytes);
+	}
 
 	this(Disassembler disasm, ushort addr, ubyte[] bytes)
 	{
@@ -72,9 +78,17 @@ struct AsmLine
 			this.bytes = bytes[0 .. 1];
 	}
 
+	string hex()
+	{
+		auto result = "        ".dup;
+		foreach (i, b; bytes)
+			result[i * 3 .. i * 3 + 2] = format("%02x", b);
+		return assumeUnique(result);
+	}
+
 	string label()
 	{
-		return disasm_.labels_.get(addr, null);
+		return disasm_ ? disasm_.labels_.get(addr, null) : "";
 	}
 
 	string instr()
@@ -88,7 +102,7 @@ struct AsmLine
 		char[] result;
 		foreach (k; opcStr)
 		{
-			if (k >= '0' && k <= '2' && argIsAddr)
+			if (disasm_ && k >= '0' && k <= '2' && argIsAddr)
 			{
 				auto s = disasm_.labels_.get(arg, null);
 				if (s)
