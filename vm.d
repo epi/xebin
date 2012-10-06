@@ -309,9 +309,12 @@ class Vm
 			break;
 		case 11:
 			if (!len)
-				len = 1;
-			foreach (ubyte ch; memory[addr .. addr + len])
-				putchar(ch == 0x9b ? '\n' : ch);
+				putchar(a == 0x9b ? '\n' : a);
+			else
+			{
+				foreach (ubyte ch; memory[addr .. addr + len])
+					putchar(ch == 0x9b ? '\n' : ch);
+			}
 			break;
 		default:
 			setNZ(y = 132);
