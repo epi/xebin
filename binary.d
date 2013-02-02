@@ -19,9 +19,10 @@
 	These rights, on this notice, rely.
 */
 
+import std.conv;
+import std.exception;
 import std.stdio;
 import std.string;
-import std.conv;
 
 ushort toUshort(ubyte[] tab)
 {
@@ -145,11 +146,10 @@ struct BinaryFileReader
 {
 	this(File f)
 	{
-		file_ = f;
-		auto pos = file_.tell();
-		file_.seek(0, SEEK_END);
-		length_ = file_.tell();
-		file_.seek(pos);
+		foreach (ubyte[] buf; f.byChunk(8192))
+		{
+			data_ ~= buf;
+		}
 	}
 
 	this(string filename)
@@ -159,41 +159,41 @@ struct BinaryFileReader
 
 	BinaryBlock readBlock()
 	{
-		ubyte[2] data;
 		ushort start = 0xffff;
 		ushort end = 0xffff;
 
 		for (;;)
 		{
-			if (file_.rawRead(data).length != 2)
-				throw new Exception("Unexpected  end of file");
+			if (data_.length < 2)
+				throw new Exception("Unexpected end of file");
 			if (start == 0xffff)
-				start = toUshort(data);
+			{
+				start = toUshort(data_[0 .. 2]);
+				data_ = data_[2 .. $];
+			}
 			else if (end == 0xffff)
 			{
-				end = toUshort(data);
+				end = toUshort(data_[0 .. 2]);
+				data_ = data_[2 .. $];
 				break;
 			}
 		}
 		
 		auto result = BinaryBlock(start);
-		if (end - start + 1 > 0)
-			result.data.length = end - start + 1;
-		else
-			throw new Exception("End address lesser than start address");
-		
-		if (file_.rawRead(result.data).length != result.data.length)
-			throw new Exception("Unexpected end of file");
-
+		enforce(end >= start, "End address lesser than start address");
+		auto l = end - start + 1;
+		enforce(data_.length >= l, "Unexpected end of file");
+		result.data = data_[0 .. l];
+		data_ = data_[l .. $];
 		return result;
 	}
-	
+
 	BinaryBlock[] readFile()
 	{
 		BinaryBlock[] result;
 		try
 		{
-			while (file_.tell() < length_)
+			while (data_.length)
 				result ~= readBlock();
 		}
 		catch (Exception e)
@@ -204,8 +204,7 @@ struct BinaryFileReader
 	}
 
 protected:
-	File file_;
-	ulong length_;
+	ubyte[] data_;
 }
 
 struct BinaryFileWriter
