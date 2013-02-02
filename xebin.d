@@ -298,43 +298,51 @@ bool ioTrace;
 
 int main(string[] args)
 {
-	string strAddr;
-
-	getopt(args,
-		config.caseSensitive,
-		config.noBundling,
-		"s|disable-os", &disableOs,
-		"trace-cpu", &cpuTrace,
-		"trace-cio", &ioTrace,
-		"a|address", &strAddr,
-		"n|position", &position,
-		"r|raw", &removeHeader,
-		"v|verbose", &verbose,
-		"o|output", &outputFile);
-
-	if (strAddr !is null)
-		address = parseInt(strAddr);
-
-	if (args.length >= 2)
+	try
 	{
-		auto funcs = [
-			"help":&printHelp,
-			"list":&list,
-			"extract":&extract,
-			"merge":&merge,
-			"unpack":&unpack,
-			"pack":&pack,
-			"disasm":&disassembly,
-			"run":&run
-			];
-		foreach (cmd, fun; funcs)
+		string strAddr;
+
+		getopt(args,
+			config.caseSensitive,
+			config.noBundling,
+			"s|disable-os", &disableOs,
+			"trace-cpu", &cpuTrace,
+			"trace-cio", &ioTrace,
+			"a|address", &strAddr,
+			"n|position", &position,
+			"r|raw", &removeHeader,
+			"v|verbose", &verbose,
+			"o|output", &outputFile);
+
+		if (strAddr !is null)
+			address = parseInt(strAddr);
+
+		if (args.length >= 2)
 		{
-			if (cmd.startsWith(args[1]))
+			auto funcs = [
+				"help":&printHelp,
+				"list":&list,
+				"extract":&extract,
+				"merge":&merge,
+				"unpack":&unpack,
+				"pack":&pack,
+				"disasm":&disassembly,
+				"run":&run
+				];
+			foreach (cmd, fun; funcs)
 			{
-				fun(args);
-				return 0;
+				if (cmd.startsWith(args[1]))
+				{
+					fun(args);
+					return 0;
+				}
 			}
 		}
+	}
+	catch (Exception e)
+	{
+		writeln("Error: ", e.msg);
+		return 1;
 	}
 	printHelp(args);
 	return 1;
