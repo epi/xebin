@@ -1,6 +1,6 @@
 VERSION = 1.1.0
 SOURCES = flashpack.d binary.d disasm.d vm.d xasm.d xebin.d
-DMD = dmd -O -release -inline -of$@
+DMD = dmd -O -release -inline -w -of$@
 ASCIIDOC = asciidoc -o $@ -a doctime
 ASCIIDOC_POSTPROCESS =
 ASCIIDOC_VALIDATE = xmllint --valid --noout --nonet $@
@@ -29,7 +29,7 @@ windist: xebin-$(VERSION)-windows.zip
 srcdist: xebin-$(VERSION)-src.zip
 
 debug:
-	$(MAKE) DMD="dmd -unittest -debug -w -wi -of$(XEBIN_EXE)" clean all
+	$(MAKE) DMD="dmd -unittest -debug -g -w -of$(XEBIN_EXE)" clean all
 
 $(XEBIN_EXE): $(SOURCES)
 	$(DMD) $(SOURCES)
@@ -59,6 +59,9 @@ clean:
 install: $(XEBIN_EXE)
 	mkdir -p $(PREFIX)/bin && cp $(XEBIN_EXE) $(PREFIX)/bin/
 
-.PHONY: all doc debug dist windist srcdist clean
+test: debug
+	./xebin
+
+.PHONY: all doc debug dist windist srcdist clean install test
 
 .DELETE_ON_ERROR:

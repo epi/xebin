@@ -2632,7 +2632,7 @@ private:
 	}
 
 	void assemblyLine() {
-		debug {
+		debug(printAssemblyLine) {
 			writeln(line);
 		}
 		totalLines++;

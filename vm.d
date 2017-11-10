@@ -4,7 +4,6 @@ import std.bitmanip;
 import std.string;
 import std.array;
 import std.algorithm;
-import std.c.stdlib;
 
 import binary;
 import disasm;
@@ -148,6 +147,7 @@ class Vm
 		memory[0x0701] = 0x00;
 		traps[0] =
 		{
+			import core.stdc.stdlib : exit;
 			exit(0);
 		};
 
@@ -208,28 +208,28 @@ class Vm
 
 	void doAccumulator(string expr)()
 	{
-		mixin(replace(expr, "@", "a") ~ ";");
+		mixin(replace(expr, "@", "a"));
 	}
 
 	void doImmediate(string expr)()
 	{
 		++pc;
 		alias pc addr;
-		mixin(replace(expr, "@", "memory[pc]") ~ ";");
+		mixin(replace(expr, "@", "memory[pc]"));
 	}
 
 	void doAbsolute(string expr)(ubyte index = 0)
 	{
 		ushort addr = fetchWord();
 		addr += index;
-		mixin(replace(expr, "@", "memory[addr]") ~ ";");
+		mixin(replace(expr, "@", "memory[addr]"));
 	}
 
 	void doAbsoluteZP(string expr)(ubyte index = 0)
 	{
 		ubyte addr = fetchByte();
 		addr += index;
-		mixin(replace(expr, "@", "memory[addr]") ~ ";");
+		mixin(replace(expr, "@", "memory[addr]"));
 	}
 
 	void doIndirectY(string expr)()
@@ -237,7 +237,7 @@ class Vm
 		ushort addr = fetchByte();
 		addr = makeWord(memory[(addr + 1) & 0xff], memory[addr]);
 		addr += y;
-		mixin(replace(expr, "@", "memory[addr]") ~ ";");
+		mixin(replace(expr, "@", "memory[addr]"));
 	}
 
 	void doIndirectX(string expr)()
@@ -245,7 +245,7 @@ class Vm
 		ushort addr = fetchByte();
 		addr += x;
 		addr = makeWord(memory[(addr + 1) & 0xff], memory[addr & 0xff]);
-		mixin(replace(expr, "@", "memory[addr]") ~ ";");
+		mixin(replace(expr, "@", "memory[addr]"));
 	}
 
 	void doBranch(string pred)()
@@ -596,22 +596,22 @@ class Vm
 			case 0x79: doAbsolute!adc(y); break;
 			case 0x7d: doAbsolute!adc(x); break;
 			case 0x7e: doAbsolute!ror(x); break;
-			case 0x81: doIndirectX!"st(addr, a)"(); break;
-			case 0x84: doAbsoluteZP!"st(addr, y)"(); break;
-			case 0x85: doAbsoluteZP!"st(addr, a)"(); break;
-			case 0x86: doAbsoluteZP!"st(addr, x)"(); break;
+			case 0x81: doIndirectX!"st(addr, a);"(); break;
+			case 0x84: doAbsoluteZP!"st(addr, y);"(); break;
+			case 0x85: doAbsoluteZP!"st(addr, a);"(); break;
+			case 0x86: doAbsoluteZP!"st(addr, x);"(); break;
 			case 0x88: setNZ(--y); break;
 			case 0x8a: setNZ(a = x); break;
-			case 0x8c: doAbsolute!"st(addr, y)"(); break;
-			case 0x8d: doAbsolute!"st(addr, a)"(); break;
-			case 0x8e: doAbsolute!"st(addr, x)"(); break;
+			case 0x8c: doAbsolute!"st(addr, y);"(); break;
+			case 0x8d: doAbsolute!"st(addr, a);"(); break;
+			case 0x8e: doAbsolute!"st(addr, x);"(); break;
 			case 0x90: doBranch!"!cflag"(); break;
-			case 0x91: doIndirectY!"st(addr, a)"(); break;
-			case 0x95: doAbsoluteZP!"st(addr, a)"(x); break;
+			case 0x91: doIndirectY!"st(addr, a);"(); break;
+			case 0x95: doAbsoluteZP!"st(addr, a);"(x); break;
 			case 0x98: setNZ(a = y); break;
-			case 0x99: doAbsolute!"st(addr, a)"(y); break;
+			case 0x99: doAbsolute!"st(addr, a);"(y); break;
 			case 0x9a: sp = x; break;
-			case 0x9d: doAbsolute!"st(addr, a)"(x); break;
+			case 0x9d: doAbsolute!"st(addr, a);"(x); break;
 			case 0xa0: doImmediate!ldy(); break;
 			case 0xa1: doIndirectX!lda(); break;
 			case 0xa2: doImmediate!ldx(); break;
@@ -687,13 +687,4 @@ class Vm
 		pc = addr;
 		run();
 	}
-}
-
-unittest
-{
-	import std.file;
-	auto v = new Vm();
-	v.memory[0xe000 .. $] = (cast(ubyte[]) std.file.read("ttl6502.bin"));
-	v.cpuTrace = true;
-	assert(collectExceptionMsg(v.jsr(0xe000)) == "Unimplemented instruction 12");
 }

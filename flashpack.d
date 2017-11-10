@@ -22,7 +22,6 @@
 */
 
 import std.stdio;
-import std.stream;
 import std.exception;
 import std.string;
 import std.algorithm;
@@ -198,7 +197,7 @@ Item[] toItems(BinaryBlock[] blocks)
 		}
 
 		sequencesAt(0);
-		foreach (int i; 1 .. srcLength)
+		for (uint i = 1; i < srcLength; ++i)
 		{
 			// >=3 duplicate bytes
 			uint cnt = min(256, srcLength - i);
@@ -593,7 +592,7 @@ unittest
 	debug writeln("unittest packBlock/unpackBlock");
 	auto blks1i = [ BinaryBlock(0x8000, cast(ubyte[]) x"80 80 80 80 80 80") ];
 	auto blks1o = packBlock(blks1i, false, 0x2000);
-	assert(blks1o[0].addr == 0x2000 && blks1o[0].data.startsWith(x"80 e0 00807f80 0103 0100"));
+	assert(blks1o[0].addr == 0x2000 && blks1o[0].data.startsWith(cast(ubyte[]) x"80 e0 00807f80 0103 0100"));
 	auto blks1u = unpackBlock(blks1o[0]);
 	assert(blks1i == blks1u);
 }
@@ -607,7 +606,7 @@ unittest
 		foreach (int j; 0 .. i + 1)
 			bb.data ~= cast(ubyte) (257 - i);
 	}
-	assert(packBlock([ bb ])[0].data.startsWith(x"c0 ca 00802f00 01fe 00 01 01fe 02 01fd 03"));
+	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) x"c0 ca 00802f00 01fe 00 01 01fe 02 01fd 03"));
 }
 
 unittest
@@ -624,7 +623,7 @@ unittest
 		x"80808080808080808080808080808080" ~
 		x"80808080808080808080808080808080" ~
 		x"abcdef"));
-	assert(packBlock([ bb ])[0].data.startsWith(x"80 8e 00807fab cd ef 80 0179 03 0100"));
+	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) x"80 8e 00807fab cd ef 80 0179 03 0100"));
 
 	bb = BinaryBlock(0x8000, cast(ubyte[])
 		(x"abcdef80808080808080808080808080" ~
@@ -636,7 +635,7 @@ unittest
 		x"80808080808080808080808080808080" ~
 		x"80808080808080808080808080808080" ~
 		x"abcdef"));
-	assert(packBlock([ bb ])[0].data.startsWith(x"c0 88 00807fab cd ef 80 017a ab cd ef 80 0100"));
+	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) x"c0 88 00807fab cd ef 80 017a ab cd ef 80 0100"));
 }
 
 unittest
