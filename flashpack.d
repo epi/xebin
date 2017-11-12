@@ -157,83 +157,65 @@ Item[] toItems(BinaryBlock[] blocks)
 
 	void addRaw(ubyte b)					{ addItem(false, b); }
 	void setAddr(ushort addr, ubyte first)	{ addItem(true, 0, (addr - 0x80) & 0xff, ((addr - 0x80) >>> 8) & 0xff, first); }
-	void addDup(uint count)					{ addItem(true, 1, cast(ubyte) (count - 2)); }
+	void addDup(size_t count)				{ addItem(true, 1, cast(ubyte) (count - 2)); }
 	void addCopy(uint dist, bool three)		{ addItem(true, cast(ubyte) ((0x80 - dist) << 1) | three); }
 
-	// identify packed items
 	foreach (block; blocks)
 	{
 		if (block.isInit || block.isRun)
 			throw new FlashPackException("Cannot pack " ~ (block.isInit ? "Init" : "Run") ~ " block");
-		setAddr(block.addr, block.data[0]);
-		ubyte[] src = block.data;
+	}
 
-		int[uint] seqs;
-		uint srcLength = cast(uint) src.length;
-		
-		struct SeqSearchResult { int dist; bool three; }
+	foreach (block; blocks)
+	{
+		const src = block.data;
+		const srclen = cast(uint) src.length;
 
-		SeqSearchResult sequencesAt(int i)
+		auto dict = iota(srclen - 2)
+			.array
+			.sort!((i, j) => src[i .. i + 2] < src[j .. j + 2]);
+
+		setAddr(block.addr, src[0]);
+
+		for (uint i = 1; i < srclen; )
 		{
-			if (i <= srcLength - 2)
-			{
-				uint duple = src[i] | (src[i + 1] << 8);
-				int dist;
-				bool three;
-				if (i <= srcLength - 3)
-				{
-					uint triple = 0x10000000U | duple | (src[i + 2] << 16);
-					dist = i - seqs.get(triple, i);
-					seqs[triple] = i;
-				}
-				if (!dist || dist > 127)
-					dist = i - seqs.get(duple, i);
-				else
-					three = true;
-				seqs[duple]	= i;
-				return SeqSearchResult(dist, three);
-			}
-			return SeqSearchResult(0, false);
-		}
-
-		sequencesAt(0);
-		for (uint i = 1; i < srcLength; ++i)
-		{
-			// >=3 duplicate bytes
-			uint cnt = min(256, srcLength - i);
+			// a byte repeated 3 or more times
 			ubyte prevb = src[i - 1];
-			foreach (int j; i .. i + cnt)
-			{
-				if (src[j] != prevb)
-				{
-					cnt = j - i;
-					break;
-				}
-			}
+			const cnt = src[i .. $].take(256).until!"a != b"(prevb).count;
 			if (cnt > 3)
 			{
-				addDup(cnt);
-				i += cnt - 1;
-				sequencesAt(i);
-				sequencesAt(i - 1);
-				sequencesAt(i - 2);
-				sequencesAt(i - 3);
+				addDup(cast(uint) cnt);
+				i += cnt;
 				continue;
 			}
 
-			// repeated sequence of 2 or 3 bytes
-			auto s = sequencesAt(i);
-			if (s.dist && s.dist <= 127)
+			// same sequence of 2 or 3 bytes found up to 127 bytes behind
+			size_t maxlen = 0;
+			uint dist;
+			if (srclen - i >= 2)
 			{
-				addCopy(s.dist, s.three);
-				sequencesAt(++i);
-				if (s.three)
-					sequencesAt(++i);
+				foreach (j, len; dict.equalRange(i)
+					.filter!(j => i - j <= 127 && i != j)
+					.map!(j => tuple(j, commonPrefix(src[i .. $].take(3), src[j .. $]).length)))
+				{
+					if (len > maxlen)
+					{
+						maxlen = len;
+						dist = i - j;
+						if (len == 3)
+							break;
+					}
+				}
+			}
+            if (maxlen >= 2)
+			{
+				addCopy(dist, maxlen == 3);
+				i += maxlen;
 				continue;
 			}
-			
+
 			// nothing to squeeze
-			addRaw(src[i]);
+			addRaw(src[i++]);
 		}
 	}
 
