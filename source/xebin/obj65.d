@@ -1,8 +1,10 @@
+module xebin.obj65;
+
 import std.file: read;
 import std.stdio;
 import std.conv;
 import std.datetime;
-import std.c.time;
+import core.stdc.time;
 
 // cc65 object file
 
@@ -17,7 +19,7 @@ class Obj65Exception : Exception
 private
 {
 
-pure immutable(ubyte[]) subArray(immutable(ubyte[]) data, size_t offs)
+immutable(ubyte[]) subArray(immutable(ubyte[]) data, size_t offs)
 {
 	if (data.length < offs + 8)
 		throw new Obj65Exception("Where are my bytes?");
@@ -28,21 +30,21 @@ pure immutable(ubyte[]) subArray(immutable(ubyte[]) data, size_t offs)
 	return data[offset .. offset + size];
 }
 
-pure uint toUint(immutable(ubyte[]) arr)
+uint toUint(immutable(ubyte[]) arr)
 {
 	if (arr.length < 2)
 		throw new Obj65Exception("Where are my bytes?");
 	return arr[0] | (arr[1] << 8) | (arr[2] << 16) | (arr[3] << 24);
 }
 
-pure ushort toUshort(immutable(ubyte[]) arr)
+ushort toUshort(immutable(ubyte[]) arr)
 {
 	if (arr.length < 2)
 		throw new Obj65Exception("Where are my bytes?");
 	return arr[0] | (arr[1] << 8);
 }
 
-pure ubyte readUbyte(ref immutable(ubyte)[] arr)
+ubyte readUbyte(ref immutable(ubyte)[] arr)
 {
 	if (arr.length < 1)
 		throw new Obj65Exception("Where are my bytes?");
@@ -51,14 +53,14 @@ pure ubyte readUbyte(ref immutable(ubyte)[] arr)
 	return result;
 }
 
-pure uint readUint(ref immutable(ubyte)[] arr)
+uint readUint(ref immutable(ubyte)[] arr)
 {
 	uint result = arr.toUint();
 	arr = arr[4 .. $];
 	return result;
 }
 
-pure uint readVar(ref immutable(ubyte)[] arr)
+uint readVar(ref immutable(ubyte)[] arr)
 {
 	uint result;
 	int shift;
@@ -73,7 +75,7 @@ pure uint readVar(ref immutable(ubyte)[] arr)
 	}		
 }
 
-pure immutable(ubyte)[] readArray(ref immutable(ubyte)[] arr, size_t len)
+immutable(ubyte)[] readArray(ref immutable(ubyte)[] arr, size_t len)
 {
 	if (arr.length < len)
 		throw new Obj65Exception("Where are my bytes?");
@@ -82,7 +84,7 @@ pure immutable(ubyte)[] readArray(ref immutable(ubyte)[] arr, size_t len)
 	return result;
 }
 
-pure string readString(ref immutable(ubyte)[] arr, size_t len)
+string readString(ref immutable(ubyte)[] arr, size_t len)
 {
 	if (arr.length < len)
 		throw new Obj65Exception("Where are my bytes?");
@@ -123,7 +125,7 @@ enum FragmentType : ubyte
 
 } // private
 
-pure bool isObj65(immutable(ubyte[]) data)
+bool isObj65(immutable(ubyte[]) data)
 {
 	return data[0 .. 4].toUint() == Obj65.magic_ && data[4 .. 6].toUshort() == Obj65.version_;
 }
@@ -299,7 +301,7 @@ class LiteralFragment : Fragment
 
 class ExprFragment : Fragment
 {
-	pure this (bool signed, uint bytes, Expr expr)
+	this (bool signed, uint bytes, Expr expr)
 	{
 		if (bytes < 1 || bytes > 4)
 			throw new Obj65Exception("Invalid expression width");
@@ -649,18 +651,14 @@ enum ExprUnaryOp : ubyte
 	Word1 = 13
 }
 
-unittest
+version(none) unittest
 {
+	import std.file : read;
 	foreach (fileName; [ "lda.o" ])
 	{
 		writeln(fileName);
-		auto infile = cast(immutable(ubyte[])) std.file.read(fileName);
+		auto infile = cast(immutable(ubyte[])) read(fileName);
 		auto obj65 = new Obj65(infile);
 		writefln("%s debug info\n\n", obj65.hasDebugInfo ? "has" : "no");
 	}
 }
-
-void main()
-{
-}
-
