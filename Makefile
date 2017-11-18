@@ -1,24 +1,14 @@
 VERSION = 1.1.0
-SOURCES = flashpack.d binary.d disasm.d vm.d xasm.d xebin.d
-DMD = dmd -O -release -inline -w -of$@
+SOURCES = $(addprefix source/xebin/,flashpack.d binary.d disasm.d vm.d xasm.d) \
+	source/app.d
 ASCIIDOC = asciidoc -o $@ -a doctime
 ASCIIDOC_POSTPROCESS =
-ASCIIDOC_VALIDATE = xmllint --valid --noout --nonet $@
 ZIP = 7z a -mx=9 -tzip $@
 RM = rm -f
 PREFIX = /usr/local
 
-ifdef ComSpec
-EXESUFFIX = .exe
-else
-ifdef COMSPEC
-EXESUFFIX = .exe
-endif
-endif 
-
-XEBIN_EXE=xebin$(EXESUFFIX)
-
-all: $(XEBIN_EXE)
+all:
+	dub build -b release
 
 doc: xebin.html
 
@@ -29,10 +19,7 @@ windist: xebin-$(VERSION)-windows.zip
 srcdist: xebin-$(VERSION)-src.zip
 
 debug:
-	$(MAKE) DMD="dmd -unittest -debug -g -w -of$(XEBIN_EXE)" clean all
-
-$(XEBIN_EXE): $(SOURCES)
-	$(DMD) $(SOURCES)
+	dub build
 
 xebin.html: README.asciidoc
 	$(ASCIIDOC) $<
@@ -52,15 +39,16 @@ xebin-$(VERSION): $(SOURCES) README.asciidoc
 	( mkdir xebin-$(VERSION) && cp $^ Makefile xebin-$(VERSION) )
 
 clean:
-	$(RM) $(XEBIN_EXE) xebin.o $(SOURCES:.d=.obj) $(SOURCES:.d=.map)
+	$(RM) xebin xebin.exe xebin.o $(SOURCES:.d=.obj) $(SOURCES:.d=.map)
 	$(RM) xebin.html xebin-$(VERSION)-windows.zip xebin-$(VERSION)-src.zip
 	$(RM) -r xebin-$(VERSION)
+	$(RM) xebin-test-library
 
-install: $(XEBIN_EXE)
-	mkdir -p $(PREFIX)/bin && cp $(XEBIN_EXE) $(PREFIX)/bin/
+install:
+	mkdir -p $(PREFIX)/bin && cp xebin $(PREFIX)/bin/
 
-test: debug
-	./xebin
+test:
+	dub test
 
 .PHONY: all doc debug dist windist srcdist clean install test
 

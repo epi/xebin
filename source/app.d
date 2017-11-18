@@ -26,10 +26,10 @@ import std.ascii;
 import std.conv;
 import std.getopt;
 
-import binary;
-import flashpack;
-import disasm;
-import vm;
+import xebin.binary;
+import xebin.flashpack;
+import xebin.disasm;
+import xebin.vm;
 
 int address = 0xffff;
 int position;

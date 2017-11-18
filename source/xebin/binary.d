@@ -19,6 +19,8 @@
 	These rights, on this notice, rely.
 */
 
+module xebin.binary;
+
 import std.conv;
 import std.exception;
 import std.stdio;

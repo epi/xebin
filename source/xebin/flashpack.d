@@ -1,4 +1,4 @@
-/*	(Written in D programming language)
+/**	(Written in D programming language)
 
 	Functions for compression and decompression of Atari XL/XE
 	binary executables using FlashPack format.
@@ -21,6 +21,8 @@
 	These rights, on this notice, rely.
 */
 
+module xebin.flashpack;
+
 import std.stdio;
 import std.exception;
 import std.string;
@@ -28,8 +30,8 @@ import std.algorithm;
 import std.range;
 import std.typecons;
 
-import binary;
-import xasm;
+import xebin.binary;
+import xebin.xasm;
 
 enum CompressionMethod
 {

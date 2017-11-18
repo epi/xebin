@@ -1,0 +1,5 @@
+name "xebin"
+description "Atari XL/XE binary file utility"
+authors "Adrian Matoga"
+copyright "Copyright © 2017, Adrian Matoga"
+license "Poetic License"

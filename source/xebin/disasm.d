@@ -19,12 +19,14 @@
 	These rights, on this notice, rely.
 */
 
+module xebin.disasm;
+
 import std.regex;
 import std.string;
 import std.conv;
 import std.exception;
 
-import binary;
+import xebin.binary;
 
 struct AsmLine
 {

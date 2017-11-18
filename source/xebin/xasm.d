@@ -16,6 +16,8 @@
 // free or for profit.
 // These rights, on this notice, rely.
 
+module xebin.xasm;
+
 import std.stdio;
 import std.math;
 import std.string;

@@ -1,3 +1,5 @@
+module xebin.vm;
+
 import std.stdio;
 import std.exception;
 import std.bitmanip;
@@ -5,8 +7,8 @@ import std.string;
 import std.array;
 import std.algorithm;
 
-import binary;
-import disasm;
+import xebin.binary;
+import xebin.disasm;
 
 ushort makeWord(uint b1, uint b0)
 {
