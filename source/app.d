@@ -197,12 +197,10 @@ void disassembly(string[] args)
 	{
 		if (args.length > 3)
 			of.writeln("; ", file.name, ":");
-		auto disasm = new Disassembler(BinaryFileReader(file).readFile());
-		foreach (blk; disasm[])
+
+		foreach (line; BinaryFileReader(file).readFile().disassemble)
 		{
-			of.writefln("\n\torg $%04x\n", blk.front.addr);
-			foreach (ln; blk)
-				of.writefln("%s\t%s", ln.label, ln.instr);
+			of.writeln(line);
 		}
 	}
 }

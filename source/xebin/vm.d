@@ -6,6 +6,7 @@ import std.bitmanip;
 import std.string;
 import std.array;
 import std.algorithm;
+import std.format : formattedWrite;
 
 import xebin.binary;
 import xebin.disasm;
@@ -177,13 +178,25 @@ class Vm
 
 		foreach (block; blocks)
 		{
+			if (cpuTrace)
+			{
+				writefln("Load %d bytes at %04X-%04X", block.length,
+					block.addr, block.end);
+			}
 			memory[block.addr .. block.addr + block.length] = block.data[];
 			if (block.isInit)
+			{
+				if (cpuTrace)
+					writefln("Init at %04x", block.initAddress);
 				jsr(block.initAddress);
+			}
 		}
-		ushort runaddr = dpeek(0x2e0);
-		if (runaddr)
+		if (ushort runaddr = dpeek(0x2e0))
+		{
+			if (cpuTrace)
+				writefln("Run at %04X", runaddr);
 			jsr(runaddr);
+		}
 	}
 
 	void push(uint b)
@@ -271,7 +284,10 @@ class Vm
 	ubyte ld(ushort addr)
 	{
 		if (cpuTrace)
-			info ~= format("R %04X %02X  ", addr, memory[addr]);
+		{
+			alignToColumn(64);
+			info.formattedWrite("R %04X %02X  ", addr, memory[addr]);
+		}
 		return memory[addr];
 	}
 
@@ -279,7 +295,10 @@ class Vm
 	{
 		memory[addr] = cast(ubyte) val;
 		if (cpuTrace)
-			info ~= format("W %04X %02X", addr, memory[addr]);
+		{
+			alignToColumn(64);
+			info.formattedWrite("W %04X %02X", addr, memory[addr]);
+		}
 		return cast(ubyte) val;
 	}
 
@@ -333,7 +352,8 @@ class Vm
 		uint aux1 = memory[0x34a + x];
 		uint aux2 = memory[0x34b + x];
 		if (ioTrace)
-			writef("CIO #%02x cmd=%02x addr=%04x len=%04x aux1=%02x aux2=%02x",
+			stderr.writef(
+				"CIO #%02x cmd=%02x addr=%04x len=%04x aux1=%02x aux2=%02x",
 				iocb, cmd, addr, len, aux1, aux2);
 		if (iocb == 0)
 			consoleIO(cmd, addr, len);
@@ -346,7 +366,10 @@ class Vm
 			}
 			iocb >>>= 4;
 			iocb -= 1;
-			scope (exit) if (ioTrace) writefln("   result=%3d len=%04x", y, dpeek(0x358 + iocb * 16));
+			scope (exit)
+			if (ioTrace)
+				stderr.writefln("   result=%3d len=%04x",
+					y, dpeek(0x358 + iocb * 16));
 			switch (cmd)
 			{
 			case 3:
@@ -425,8 +448,14 @@ class Vm
 
 	bool cpuTrace = false;
 	bool ioTrace = false;
+	Appender!(char[]) info;
 
-	string info;
+	void alignToColumn(size_t col)
+	{
+		import std.range : repeat, take;
+		if (info.data.length < col)
+			info.put(' '.repeat.take(col - info.data.length));
+	}
 
 	void run()
 	{
@@ -434,25 +463,28 @@ class Vm
 		for (;;)
 		{
 			ubyte instr = fetchByte();
-			info = "";
 			if (cpuTrace)
 			{
-				writef("A=%02X X=%02X Y=%02X S=%02X P=%s%s*-%s%s%s%s PC=%04X: ", a, x, y, sp,
+				info.formattedWrite(
+					"A=%02X X=%02X Y=%02X S=%02X P=%s%s*-%s%s%s%s PC=",
+					a, x, y, sp,
 					nflag ? "N" : "-",
 					vflag ? "V" : "-",
 					dflag ? "D" : "-",
 					iflag ? "I" : "-",
 					zflag ? "Z" : "-",
 					cflag ? "C" : "-", pc);
-				
-				auto al = AsmLine(pc, memory[pc .. $]);
-				write(al.hex());
-				char[] str = replicate([ ' ' ], 32);
-				auto istr = al.instr();
-				auto indent = min(16, 0xff - sp);
-				str[indent .. indent + istr.length] = istr;
-				write(str);
+
+				ushort addr = pc;
+				info.put(disassembleOne(memory, addr));
 			}
+			scope(exit)
+			if (info.data.length)
+			{
+				stderr.writeln(info.data);
+				info.clear();
+			}
+
 			switch (instr)
 			{
 			case 0x00:
@@ -677,8 +709,6 @@ class Vm
 				throw new Exception(
 					format("Unimplemented instruction %02X", instr));
 			}
-			if (cpuTrace)
-				writeln(" ", info);
 		}
 	}
 

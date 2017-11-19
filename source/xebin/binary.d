@@ -54,6 +54,11 @@ struct BinaryBlock
 	ushort addr;
 	ubyte[] data;
 
+	@property ushort end() const pure nothrow @safe
+	{
+		return cast(ushort) (addr + data.length - 1);
+	}
+
 	@property bool isValid()
 	{
 		return data.length > 0 && addr + data.length <= 0xffff;
