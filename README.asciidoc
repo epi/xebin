@@ -191,8 +191,7 @@ as well as different settings for OS ROM and interrupts.
 Feedback
 --------
 
-Recommended way to report any issues concerning +xebin+ is to use http://github.com/epi/xebin/issues[this tracker].
-You can also send bug reports, patches and feature requests to +epi at atari8 dot info+.
+Issues with +xebin+ should be reported via http://github.com/epi/xebin/issues[this tracker].
 
 
 Authors
