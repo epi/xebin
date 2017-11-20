@@ -309,10 +309,11 @@ class Vm
 		switch (cmd)
 		{
 		case 5:
-			auto s = readln();
-			foreach (ubyte ch; s.stripRight.representation[0 .. min(len, s.length)])
+			const s = readln().representation;
+			const l = min(len, s.length);
+			foreach (ubyte ch; s[0 .. l])
 				memory[addr++] = (ch == '\n') ? 0x9b : ch;
-			dpoke(0x348, min(len, s.length));
+			dpoke(0x348, l);
 			break;				
 		case 9:
 			if (!len)
