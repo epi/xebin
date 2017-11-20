@@ -216,7 +216,7 @@ void run(string[] args)
 
 void printHelp(string[] args)
 {
-	debug {} else write(
+	write(
 		"Atari XL/XE binary file utility " ~ VERSION_STRING ~ "\n" ~
 		"\nUsage:\n" ~
 		args[0] ~ " command [options] [input_file ...]\n" ~
