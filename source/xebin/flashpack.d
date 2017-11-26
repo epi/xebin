@@ -106,7 +106,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 	auto blk = blocks[0];
 	if (blk.addr == runAddr)
 	{
-		auto xasm = new Xasm;
+		auto xasm = new Assembler;
 		xasm.defineLabel("ADDRESS", blk.addr + DepackerLength.FLASHPACK_10);
 		xasm.defineLabel("CODEADDR", blk.addr);
 		xasm.assemblyString(depackerSrc10);
@@ -117,7 +117,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 	{
 		if (blk.length > DepackerLength.FLASHPACK_21)
 		{
-			auto xasm = new Xasm;
+			auto xasm = new Assembler;
 			xasm.defineLabel("ADDRESS", blk.addr);
 			xasm.defineLabel("CODEADDR", cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21));
 			xasm.defineLabel("OS_DISABLED", 0);
@@ -128,7 +128,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 		
 		if (blk.length > DepackerLength.FLASHPACK_21_OS_DISABLED)
 		{
-			auto xasm = new Xasm;
+			auto xasm = new Assembler;
 			xasm.defineLabel("ADDRESS", blk.addr);
 			xasm.defineLabel("CODEADDR", cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED));
 			xasm.defineLabel("OS_DISABLED", 1);
@@ -293,7 +293,7 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	result.addr = addr;
 
 	// append depacker
-	auto xasm = new Xasm;
+	auto xasm = new Assembler;
 	xasm.defineLabel("ADDRESS", result.addr);
 	xasm.defineLabel("CODEADDR", cast(int) (result.addr + result.length));
 	xasm.defineLabel("OS_DISABLED", disableOs ? 1 : 0);
@@ -542,7 +542,7 @@ enum DepackerLength
 unittest
 {
 	debug writeln("unittest DepackerLength.FLASHPACK_21");
-	auto xasm = new Xasm();
+	auto xasm = new Assembler();
 	xasm.defineLabel("ADDRESS", 0x805a);
 	xasm.defineLabel("CODEADDR", 0x8000);
 	xasm.defineLabel("OS_DISABLED", 0);
@@ -553,7 +553,7 @@ unittest
 unittest
 {
 	debug writeln("unittest DepackerLength.FLASHPACK_21_OS_DISABLED");
-	auto xasm = new Xasm();
+	auto xasm = new Assembler();
 	xasm.defineLabel("ADDRESS", 0x806b);
 	xasm.defineLabel("CODEADDR", 0x8000);
 	xasm.defineLabel("OS_DISABLED", 1);
@@ -564,7 +564,7 @@ unittest
 unittest
 {
 	debug writeln("unittest DepackerLength.FLASHPACK_10");
-	auto xasm = new Xasm();
+	auto xasm = new Assembler();
 	xasm.defineLabel("ADDRESS", 0x805e);
 	xasm.defineLabel("CODEADDR", 0x8000);
 	xasm.assemblyString(depackerSrc10);

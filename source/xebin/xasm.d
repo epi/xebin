@@ -184,7 +184,7 @@ private {
 
 }
 
-class Xasm {
+class Assembler {
 
 	void defineLabel(string name, int value) {
 		auto lbl = new Label(value);
@@ -849,8 +849,8 @@ private:
 	}
 
 	unittest {
-		debug writeln("unittest Xasm.testValue");
-		auto xasm = new Xasm;
+		debug writeln("unittest Assembler.testValue");
+		auto xasm = new Assembler;
 		assert(xasm.testValue("123") == 123);
 		assert(xasm.testValue("$1234abCd") == 0x1234abcd);
 		assert(xasm.testValue("%101") == 5);
@@ -1127,8 +1127,8 @@ private:
 	}
 
 	unittest {
-		debug writeln("unittest Xasm.testAddrMode");
-		auto xasm = new Xasm;
+		debug writeln("unittest Assembler.testAddrMode");
+		auto xasm = new Assembler;
 		assert(xasm.testAddrMode(" @") == AddrMode.ACCUMULATOR);
 		assert(xasm.testAddrMode(" #0") == AddrMode.IMMEDIATE);
 		assert(xasm.testAddrMode(" $abc,x-") == cast(AddrMode) (AddrMode.ABSOLUTE_X + AddrMode.DECREMENT));
@@ -1171,8 +1171,8 @@ private:
 	}
 
 	unittest {
-		debug writeln("unittest Xasm.filenameExt");
-		auto xasm = new Xasm;
+		debug writeln("unittest Assembler.filenameExt");
+		auto xasm = new Assembler;
 		assert(xasm.filenameExt("foo.bar") == 3);
 		assert(xasm.filenameExt("foo.bar/foo") == -1);
 		assert(xasm.filenameExt("foobar") == -1);
@@ -2599,8 +2599,8 @@ private:
 	}
 
 	unittest {
-		debug writeln("unittest Xasm.testInstruction");
-		auto xasm = new Xasm;
+		debug writeln("unittest Assembler.testInstruction");
+		auto xasm = new Assembler;
 		assert(xasm.testInstruction("nop") == cast(ubyte[]) x"ea");
 		assert(xasm.testInstruction("add (5,0)") == cast(ubyte[]) x"18a2006105");
 		assert(xasm.testInstruction("mwa #$abcd $1234") == cast(ubyte[]) x"a9cd8d3412a9ab8d3512");
@@ -2809,7 +2809,7 @@ private:
 
 /*void main()
 {
-	auto xasm = new Xasm;
+	auto xasm = new Assembler;
 	xasm.assemblyString("
 
 	opt h-
