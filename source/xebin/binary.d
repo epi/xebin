@@ -262,26 +262,6 @@ struct BinaryFileWriter
 		writeBlocks(blocks);
 	}
 
-	void writePoke(ushort addr, ubyte value)
-	{
-		writeBlock(addr, [ value ]);
-	}
-
-	void writeDPoke(ushort addr, ushort value)
-	{
-		writeBlock(addr, .toBytes(value));
-	}
-
-	void writeRun(ushort addr)
-	{
-		writeDPoke(0x2e0, addr);
-	}
-	
-	void writeInit(ushort addr)
-	{
-		writeDPoke(0x2e1, addr);
-	}
-
 private:
 	File file_;
 }
