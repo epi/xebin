@@ -3,7 +3,7 @@
 	Simple 6502 disassembler.
 
 	Author: Adrian Matoga epi@atari8.info
-	
+
 	Poetic License:
 
 	This work 'as-is' we provide.
@@ -23,6 +23,7 @@ module xebin.disasm;
 
 import std.algorithm : map, sort, uniq, equal;
 import std.array : array, appender;
+import std.conv : hx = hexString;
 import std.format : formattedWrite;
 import std.range : chunks, assumeSorted, SortedRange;
 import std.string;
@@ -94,8 +95,8 @@ unittest
 {
 	// label from run/init address
 	auto bb = [
-		BinaryBlock(0x2000, cast(ubyte[]) x"90 02 a9 20 20 ad de"),
-		BinaryBlock(0x02e0, cast(ubyte[]) x"00 20 00 40")
+		BinaryBlock(0x2000, cast(ubyte[]) hx!"90 02 a9 20 20 ad de"),
+		BinaryBlock(0x02e0, cast(ubyte[]) hx!"00 20 00 40")
 	];
 	assert(bb.disassembleToStrings.equal([
 			"L4000\tEQU $4000",
@@ -114,7 +115,7 @@ unittest
 {
 	// reference to mid-instruction, unfinished instruction
 	auto bb = [
-		BinaryBlock(0x2100, cast(ubyte[]) x"8d 04 21 4c 00 21 0d"),
+		BinaryBlock(0x2100, cast(ubyte[]) hx!"8d 04 21 4c 00 21 0d"),
 	];
 	assert(bb.disassembleToStrings.equal([
 			"\tORG $2100",
@@ -128,7 +129,7 @@ unittest
 {
 	// zero page
 	auto bb = [
-		BinaryBlock(0x2100, cast(ubyte[]) x"85 85 8d 8d 00"),
+		BinaryBlock(0x2100, cast(ubyte[]) hx!"85 85 8d 8d 00"),
 	];
 	assert(bb.disassembleToStrings.equal([
 			"L0085\tEQU $0085",

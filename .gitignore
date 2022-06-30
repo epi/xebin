@@ -1,6 +1,6 @@
 .dub
 xebin.dproj
-xebin
+./xebin
 xebin-test-library
 *.o
 *.obj

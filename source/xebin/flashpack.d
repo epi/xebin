@@ -23,11 +23,12 @@
 
 module xebin.flashpack;
 
-import std.stdio;
-import std.exception;
-import std.string;
 import std.algorithm;
+import std.conv : hx = hexString;
+import std.exception;
 import std.range;
+import std.stdio;
+import std.string;
 import std.typecons;
 
 import xebin.binary;
@@ -125,7 +126,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 			if (xasm.result[] == blk.data[blk.length - DepackerLength.FLASHPACK_21 .. $])
 				return CompressionMethod.FLASHPACK_21;
 		}
-		
+
 		if (blk.length > DepackerLength.FLASHPACK_21_OS_DISABLED)
 		{
 			auto xasm = new Xasm;
@@ -263,7 +264,7 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	// pack
 	auto result = BinaryBlock(0, blocks.toItems().toBytes());
 	size_t packedLength = result.length + (disableOs ? DepackerLength.FLASHPACK_21_OS_DISABLED : DepackerLength.FLASHPACK_21);
-	
+
 	// auto set addr
 	if (addr == 0xffff)
 	{
@@ -525,7 +526,7 @@ setad
 	stx $FE
 	sta $FF
 	bcc do
-		
+
 get	lda ADDRESS
 	inc get+1
 	sne:inc get+2
@@ -574,9 +575,9 @@ unittest
 unittest
 {
 	debug writeln("unittest packBlock/unpackBlock");
-	auto blks1i = [ BinaryBlock(0x8000, cast(ubyte[]) x"80 80 80 80 80 80") ];
+	auto blks1i = [ BinaryBlock(0x8000, cast(ubyte[]) hx!"80 80 80 80 80 80") ];
 	auto blks1o = packBlock(blks1i, false, 0x2000);
-	assert(blks1o[0].addr == 0x2000 && blks1o[0].data.startsWith(cast(ubyte[]) x"80 e0 00807f80 0103 0100"));
+	assert(blks1o[0].addr == 0x2000 && blks1o[0].data.startsWith(cast(ubyte[]) hx!"80 e0 00807f80 0103 0100"));
 	auto blks1u = unpackBlock(blks1o[0]);
 	assert(blks1i == blks1u);
 }
@@ -590,7 +591,7 @@ unittest
 		foreach (int j; 0 .. i + 1)
 			bb.data ~= cast(ubyte) (257 - i);
 	}
-	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) x"c0 ca 00802f00 01fe 00 01 01fe 02 01fd 03"));
+	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) hx!"c0 ca 00802f00 01fe 00 01 01fe 02 01fd 03"));
 }
 
 unittest
@@ -598,28 +599,28 @@ unittest
 	debug writeln("unittest packBlock copy");
 
 	auto bb = BinaryBlock(0x8000, cast(ubyte[])
-		(x"abcdef808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"abcdef"));
-	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) x"80 8e 00807fab cd ef 80 0179 03 0100"));
+		(hx!"abcdef808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"abcdef"));
+	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) hx!"80 8e 00807fab cd ef 80 0179 03 0100"));
 
 	bb = BinaryBlock(0x8000, cast(ubyte[])
-		(x"abcdef80808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"80808080808080808080808080808080" ~
-		x"abcdef"));
-	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) x"c0 88 00807fab cd ef 80 017a ab cd ef 80 0100"));
+		(hx!"abcdef80808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"80808080808080808080808080808080" ~
+		hx!"abcdef"));
+	assert(packBlock([ bb ])[0].data.startsWith(cast(ubyte[]) hx!"c0 88 00807fab cd ef 80 017a ab cd ef 80 0100"));
 }
 
 unittest
@@ -632,7 +633,7 @@ unittest
 		bb.data ~= i | 0x80;
 		foreach (ubyte j; 0 .. i)
 			bb.data ~= i;
-		bb.data ~= i & 1 ? x"abcd" : x"abefcd";
+		bb.data ~= i & 1 ? hx!"abcd" : hx!"abefcd";
 	}
 	auto packed = flashPack([ bb ]);
 	auto unpacked = flashUnpack(packed);

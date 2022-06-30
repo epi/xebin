@@ -18,11 +18,11 @@
 
 module xebin.xasm;
 
-import std.stdio;
-import std.math;
-import std.string;
-import std.conv;
 import std.array;
+import std.conv : hx = hexString, to;
+import std.math;
+import std.stdio;
+import std.string;
 
 class AssemblyError : Exception {
 
@@ -2601,12 +2601,12 @@ private:
 	unittest {
 		debug writeln("unittest Xasm.testInstruction");
 		auto xasm = new Xasm;
-		assert(xasm.testInstruction("nop") == cast(ubyte[]) x"ea");
-		assert(xasm.testInstruction("add (5,0)") == cast(ubyte[]) x"18a2006105");
-		assert(xasm.testInstruction("mwa #$abcd $1234") == cast(ubyte[]) x"a9cd8d3412a9ab8d3512");
-		assert(xasm.testInstruction("dta 5,d'Foo'*,a($4589)") == cast(ubyte[]) x"05a6efef8945");
+		assert(xasm.testInstruction("nop") == cast(ubyte[]) hx!"ea");
+		assert(xasm.testInstruction("add (5,0)") == cast(ubyte[]) hx!"18a2006105");
+		assert(xasm.testInstruction("mwa #$abcd $1234") == cast(ubyte[]) hx!"a9cd8d3412a9ab8d3512");
+		assert(xasm.testInstruction("dta 5,d'Foo'*,a($4589)") == cast(ubyte[]) hx!"05a6efef8945");
 		assert(xasm.testInstruction("dta r(1,12,123,1234567890,12345678900000,.5,.03,000.1664534589,1e97)")
-		 == cast(ubyte[]) x"400100000000 401200000000 410123000000 441234567890 461234567890 3f5000000000 3f0300000000 3f1664534589 701000000000");
+		 == cast(ubyte[]) hx!"400100000000 401200000000 410123000000 441234567890 461234567890 3f5000000000 3f0300000000 3f1664534589 701000000000");
 	}
 
 	void assemblyPair() {

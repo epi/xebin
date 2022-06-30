@@ -50,7 +50,7 @@ q{
 
 enum sbc =
 q{
-	ubyte arg = ~@;
+	uint arg = ~@;
 	if (!dflag)
 	{
 		ubyte oa = a;
@@ -270,7 +270,7 @@ class Vm
 		{
 			ushort oldpc = pc;
 			pc++;
-			pc += offs; 
+			pc += offs;
 			pc--;
 		}
 	}
@@ -314,7 +314,7 @@ class Vm
 			foreach (ubyte ch; s[0 .. l])
 				memory[addr++] = (ch == '\n') ? 0x9b : ch;
 			dpoke(0x348, l);
-			break;				
+			break;
 		case 9:
 			if (!len)
 				len = 1;
@@ -379,7 +379,7 @@ class Vm
 					setNZ(y = 129);
 					return;
 				}
-				char[] name;	
+				char[] name;
 				foreach (ch; memory[addr .. $])
 				{
 					if (ch == 0x9b || !ch)
