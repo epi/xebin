@@ -1,4 +1,4 @@
-module xebin.vm;
+module xebin.emu;
 
 import std.stdio;
 import std.exception;
@@ -50,7 +50,7 @@ q{
 
 enum sbc =
 q{
-	ubyte arg = ~@;
+	ubyte arg = cast(ubyte) ~@;
 	if (!dflag)
 	{
 		ubyte oa = a;
@@ -104,7 +104,7 @@ q{
 	vflag = (@ & 0x40) != 0;
 };
 
-class Vm
+class Emulator
 {
 	private ubyte[] memory;
 	private void delegate()[ubyte] traps;
@@ -270,7 +270,7 @@ class Vm
 		{
 			ushort oldpc = pc;
 			pc++;
-			pc += offs; 
+			pc += offs;
 			pc--;
 		}
 	}
@@ -314,7 +314,7 @@ class Vm
 			foreach (ubyte ch; s[0 .. l])
 				memory[addr++] = (ch == '\n') ? 0x9b : ch;
 			dpoke(0x348, l);
-			break;				
+			break;
 		case 9:
 			if (!len)
 				len = 1;
@@ -379,7 +379,7 @@ class Vm
 					setNZ(y = 129);
 					return;
 				}
-				char[] name;	
+				char[] name;
 				foreach (ch; memory[addr .. $])
 				{
 					if (ch == 0x9b || !ch)

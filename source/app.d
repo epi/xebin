@@ -29,7 +29,7 @@ import std.getopt;
 import xebin.binary;
 import xebin.flashpack;
 import xebin.disasm;
-import xebin.vm;
+import xebin.emu;
 
 int address = 0xffff;
 int position;
@@ -208,10 +208,10 @@ void disassembly(string[] args)
 void run(string[] args)
 {
 	auto blocks = BinaryFileReader(InputFiles(args).front).readFile();
-	auto v = new Vm();
-	v.ioTrace = ioTrace;
-	v.cpuTrace = cpuTrace;
-	v.loadAndRun(blocks);
+	auto emu = new Emulator();
+	emu.ioTrace = ioTrace;
+	emu.cpuTrace = cpuTrace;
+	emu.loadAndRun(blocks);
 }
 
 void printHelp(string[] args)
@@ -229,7 +229,7 @@ void printHelp(string[] args)
 		" i[nsert]  [-n=pos] [-a=ad] [-o=fn] [-v]  insert block into file\n" ~ 
 		" o[ptimize] [-o=fn] [-i]               optimize file\n +/
 		" d[isasm]  [-o=fn]                     disassemble blocks\n" ~
-		" r[un]                                 run in a simple virtual machine\n" ~
+		" r[un]                                 run in a simple emulator\n" ~
 		" p[ack]    [-a=ad] [-s] [-o=fn] [-v]   pack using FlashPack algorithm\n" ~
 		" u[npack]  [-o=fn] [-v]                unpack FlashPack'd file\n" ~
 		" h[elp]                                print this message\n" ~
