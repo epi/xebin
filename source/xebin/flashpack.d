@@ -1,27 +1,27 @@
-/**	(Written in D programming language)
+/*
+Compress executables
 
-	Functions for compression and decompression of Atari XL/XE
-	binary executables using FlashPack format.
+Copyright (C) 2010-2014, 2017, 2023 Adrian Matoga
 
-	Author: Adrian Matoga epi@atari8.info
-	Includes FlashPack depacking routines by Piotr Fusik.
+This file is part of xebin.
 
-	Poetic License:
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-	This work 'as-is' we provide.
-	No warranty express or implied.
-	We've done our best,
-	to debug and test.
-	Liability for damages denied.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-	Permission is granted hereby,
-	to copy, share, and modify.
-	Use as is fit,
-	free or for profit.
-	These rights, on this notice, rely.
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 module xebin.flashpack;
+
+/+
 
 import std.stdio;
 import std.exception;
@@ -125,7 +125,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 			if (xasm.result[] == blk.data[blk.length - DepackerLength.FLASHPACK_21 .. $])
 				return CompressionMethod.FLASHPACK_21;
 		}
-		
+
 		if (blk.length > DepackerLength.FLASHPACK_21_OS_DISABLED)
 		{
 			auto xasm = new Assembler;
@@ -263,7 +263,7 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	// pack
 	auto result = BinaryBlock(0, blocks.toItems().toBytes());
 	size_t packedLength = result.length + (disableOs ? DepackerLength.FLASHPACK_21_OS_DISABLED : DepackerLength.FLASHPACK_21);
-	
+
 	// auto set addr
 	if (addr == 0xffff)
 	{
@@ -525,7 +525,7 @@ setad
 	stx $FE
 	sta $FF
 	bcc do
-		
+
 get	lda ADDRESS
 	inc get+1
 	sne:inc get+2
@@ -639,3 +639,4 @@ unittest
 	assert(unpacked == [ bb ]);
 }
 
++/

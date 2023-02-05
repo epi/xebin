@@ -1,24 +1,23 @@
-/*	(Written in D programming language)
+/*
+Simple disassembler
 
-	Simple 6502 disassembler.
+Copyright (C) 2010-2014, 2017, 2023 Adrian Matoga
 
-	Author: Adrian Matoga epi@atari8.info
-	
-	Poetic License:
+This file is part of xebin.
 
-	This work 'as-is' we provide.
-	No warranty express or implied.
-	We've done our best,
-	to debug and test.
-	Liability for damages denied.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-	Permission is granted hereby,
-	to copy, share, and modify.
-	Use as is fit,
-	free or for profit.
-	These rights, on this notice, rely.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-
 module xebin.disasm;
 
 import std.algorithm : map, sort, uniq, equal;
@@ -27,7 +26,10 @@ import std.format : formattedWrite;
 import std.range : chunks, assumeSorted, SortedRange;
 import std.string;
 
-import xebin.binary;
+import std.conv : hexString;
+
+import xebin.objectfile;
+import xebin.utils;
 
 ///
 string disassembleOne(const(ubyte[]) memory, ref ushort addr)
@@ -75,9 +77,9 @@ unittest
 }
 
 ///
-auto disassemble(BinaryBlock[] blocks)
+auto disassemble(CompositeSegment top)
 {
-	return Disassembler(blocks);
+	return Disassembler(top);
 }
 
 private version(unittest) string[] disassembleToStrings(BinaryBlock[] blocks)
@@ -89,13 +91,12 @@ private version(unittest) string[] disassembleToStrings(BinaryBlock[] blocks)
 	}
 	return app.data;
 }
-
 unittest
 {
 	// label from run/init address
 	auto bb = [
-		BinaryBlock(0x2000, cast(ubyte[]) x"90 02 a9 20 20 ad de"),
-		BinaryBlock(0x02e0, cast(ubyte[]) x"00 20 00 40")
+		BinaryBlock(0x2000, cast(ubyte[]) hexString!"90 02 a9 20 20 ad de"),
+		BinaryBlock(0x02e0, cast(ubyte[]) hexString!"00 20 00 40")
 	];
 	assert(bb.disassembleToStrings.equal([
 			"L4000\tEQU $4000",
@@ -139,54 +140,54 @@ unittest
 		]));
 }
 
-private:
-
 struct Disassembler
 {
-	this(BinaryBlock[] blocks)
-	{
-		m_blocks = blocks;
-		m_instrSpans = {
+	this(CompositeSegment top) {
+		_top = top;
+		_instrSpans = {
 			auto app = appender!(Span[]);
-			foreach (block; blocks)
-			{
-				foreach (addr, atype, bytes; instructionSplitter(block))
-					app.put(Span(addr, cast(ushort) (addr + bytes.length - 1)));
-			}
+			top.accept(new class DefaultSegmentVisitor {
+				override bool visit(LoadableSegment seg) {
+					foreach (addr, atype, bytes; instructionSplitter(seg))
+						app.put(Span(addr, cast(uint) (addr + bytes.length - 1)));
+					return true;
+				}
+			});
 			return app.data.sort;
 		}();
-		m_labeledAddresses = {
-			auto app = appender!(ushort[]);
-			void put(ushort addr)
-			{
-				app.put(alignToInstr(addr));
+		_labeledAddresses = {
+			auto app = appender!(uint[]);
+
+			void put(uint addr) {
+				 app.put(alignToInstr(addr));
 			}
-			foreach (block; blocks)
-			{
-				if (block.isRun)
-					put(block.runAddress);
-				if (block.isInit)
-					put(block.initAddress);
-				foreach (addr, atype, const bytes; instructionSplitter(block))
-				{
-					switch (atype) with(AddrType)
-					{
-					case relative:
-						put(cast(ushort) (addr + 2 + cast(byte) bytes[1]));
-						break;
-					case zeropage:
-						put(bytes[1]);
-						break;
-					case word:
-						put(bytes[1 .. $].peek!ushort);
-						break;
-					case dta_a:
-						put(bytes[].peek!ushort);
-						break;
-					default:
+
+			top.accept(new class DefaultSegmentVisitor {
+				override bool visit(LoadableSegment seg) {
+					if (seg.isRun)
+						put(seg.runAddr);
+					if (seg.isInit)
+						put(seg.initAddr);
+					foreach (addr, atype, const bytes; instructionSplitter(seg)) {
+						switch (atype) with(AddrType) {
+						case relative:
+							put(addr + 2 + cast(byte) bytes[1]);
+							break;
+						case zeropage:
+							put(bytes[1]);
+							break;
+						case word:
+							put(bytes[1 .. $].peekLE!ushort);
+							break;
+						case dta_a:
+							put(bytes[].peekLE!ushort);
+							break;
+						default:
+						}
 					}
+					return true;
 				}
-			}
+			});
 			return app.data.sort.uniq.array.assumeSorted;
 		}();
 	}
@@ -196,12 +197,11 @@ struct Disassembler
 
 	int opApply(scope int delegate(const(char)[] line) dg)
 	{
-		uint[ushort] labels;
+		uint[uint] labels;
 
 		auto app = appender!(char[]);
 
-		int put(A...)(auto ref A a)
-		{
+		int put(A...)(auto ref A a) {
 			app.formattedWrite(a);
 			int res = dg(app.data);
 			if (!res)
@@ -209,8 +209,7 @@ struct Disassembler
 			return res;
 		}
 
-		void declareLabel(ushort addr)
-		{
+		void declareLabel(uint addr) {
 			const cnt = labels[addr]++;
 			app.formattedWrite("L%04X", addr);
 			if (cnt)
@@ -218,10 +217,9 @@ struct Disassembler
 			app.put('\t');
 		}
 
-		void putAddr(ushort addr)
-		{
+		void putAddr(uint addr) {
 			const a = alignToInstr(addr);
-			auto r = m_labeledAddresses.equalRange(a);
+			auto r = _labeledAddresses.equalRange(a);
 			if (r.empty)
 				app.formattedWrite("$%04X", addr);
 			else if (a == addr)
@@ -230,19 +228,19 @@ struct Disassembler
 				app.formattedWrite("L%04X+%d", a, addr - a);
 		}
 
-		foreach (l; m_labeledAddresses)
-		{
-			const inblock = {
-				foreach (block; m_blocks)
-				{
-					if (Span(block.addr, block.end).overlaps(Span(l, l)))
-					{
-						return true;
+		foreach (l; _labeledAddresses) {
+			auto sv = new class DefaultSegmentVisitor {
+				bool inblock;
+				override bool visit(LoadableSegment seg) {
+					if (Span(seg.addr, seg.end).overlaps(Span(l, l))) {
+						inblock = true;
+						return false;
 					}
+					return true;
 				}
-				return false;
-			}();
-			if (!inblock)
+			};
+			_top.accept(sv);
+			if (!sv.inblock)
 			{
 				declareLabel(l);
 				if (auto res = put("EQU $%04X", l, l))
@@ -250,72 +248,63 @@ struct Disassembler
 			}
 		}
 
-		foreach (block; m_blocks)
-		{
-			if (auto res = put("\tORG $%04X", block.addr))
-				return res;
-			foreach (addr, atype, bytes; instructionSplitter(block))
-			{
-				auto r = m_labeledAddresses.equalRange(addr);
-				if (!r.empty)
-					app.formattedWrite("L%04X", addr);
-				app.put('\t');
-				if (atype == AddrType.dta_a)
-				{
-					app.put("DTA A(");
-					putAddr(bytes[].peek!ushort);
-					app.put(')');
-				}
-				else
-				{
-					const instr = instructions[bytes[0]];
-					if (instr[0] == '@' || bytes.length < opLengths[bytes[0]])
-					{
-						app.formattedWrite("DTA $%02X", bytes[0]);
-					}
-					else
-					{
-						foreach (char c; instr)
-						{
-							if (c == '0')
-								putAddr(cast(ushort) (addr + 2 + cast(byte) bytes[1]));
-							else if (c == '1')
-							{
-								if (atype == AddrType.immediate)
-									app.formattedWrite("$%02X", bytes[1]);
-								else
-									putAddr(bytes[1]);
+		int res;
+		_top.accept(new class DefaultSegmentVisitor {
+			override bool visit(LoadableSegment seg) {
+				if ((res = put("\tORG $%04X", seg.addr)) != 0)
+					return false;
+				foreach (addr, atype, bytes; instructionSplitter(seg)) {
+					auto r = _labeledAddresses.equalRange(addr);
+					if (!r.empty)
+						app.formattedWrite("L%04X", addr);
+					app.put('\t');
+					if (atype == AddrType.dta_a) {
+						app.put("DTA A(");
+						putAddr(bytes[].peekLE!ushort);
+						app.put(')');
+					} else {
+						const instr = instructions[bytes[0]];
+						if (instr[0] == '@' || bytes.length < opLengths[bytes[0]]) {
+							app.formattedWrite("DTA $%02X", bytes[0]);
+						} else {
+							foreach (char c; instr) {
+								if (c == '0') {
+									putAddr(cast(ushort) (addr + 2 + cast(byte) bytes[1]));
+								} else if (c == '1') {
+									if (atype == AddrType.immediate)
+										app.formattedWrite("$%02X", bytes[1]);
+									else
+										putAddr(bytes[1]);
+								} else if (c == '2') {
+									const a = bytes[1 .. $].peekLE!ushort;
+									if (a < 0x100 && app.data[$ - 1] == ' ')
+										app.put("A:");
+									putAddr(a);
+								} else {
+									app.put(c);
+								}
 							}
-							else if (c == '2')
-							{
-								const a = peek!ushort(bytes[1 .. $]);
-								if (a < 0x100 && app.data[$ - 1] == ' ')
-									app.put("A:");
-								putAddr(a);
-							}
-							else
-								app.put(c);
 						}
 					}
+					if ((res = dg(app.data)) != 0)
+						return false;
+					app.clear();
 				}
-				if (auto res = dg(app.data))
-					return res;
-				app.clear();
+				return true;
 			}
-		}
-
-		return 0;
+		});
+		return res;
 	}
 
 private:
-	BinaryBlock[] m_blocks;
-	SortedRange!(Span[]) m_instrSpans;
-	SortedRange!(ushort[]) m_labeledAddresses;
+	CompositeSegment _top;
+	SortedRange!(Span[]) _instrSpans;
+	SortedRange!(uint[]) _labeledAddresses;
 
 	static struct Span
 	{
-		ushort begin;
-		ushort end;
+		uint begin;
+		uint end;
 		int opCmp(Span rhs) pure nothrow const @safe
 		{
 			if (begin <= rhs.end && rhs.begin <= end)
@@ -324,27 +313,20 @@ private:
 				return -1;
 			return 1;
 		}
-		bool overlaps(Span rhs) const pure nothrow @safe
-		{
-			return this.opCmp(rhs) == 0;
-		}
+
+		bool overlaps(Span rhs) const pure nothrow @safe => this.opCmp(rhs) == 0;
 	}
 
-	ushort alignToInstr(ushort addr)
-	{
-		auto r = m_instrSpans.equalRange(Span(addr, addr));
+	uint alignToInstr(uint addr) {
+		auto r = _instrSpans.equalRange(Span(addr, addr));
 		if (r.empty)
 			return addr;
 		return r.front.begin;
 	}
 }
 
-T peek(T, R)(auto ref R r)
-{
-	import std.bitmanip : stdpeek = peek;
-	import std.system : Endian;
-	return stdpeek!(T, Endian.littleEndian, R)(r);
-}
+private:
+
 
 static immutable(string[256]) instructions =
 [	// shamelessly stolen from Atari800
@@ -448,15 +430,15 @@ static immutable(ubyte[256]) opLengths =
 			}
 		}).array;
 
-auto instructionSplitter(BinaryBlock block)
+auto instructionSplitter(LoadableSegment segment)
 {
 	static struct Splitter
 	{
-		BinaryBlock block;
-		int opApply(scope int delegate(ushort addr, AddrType atype, const(ubyte)[] bytes) dg) const
+		LoadableSegment segment;
+		int opApply(scope int delegate(uint addr, AddrType atype, const(ubyte)[] bytes) dg) const
 		{
-			ushort addr = block.addr;
-			const(ubyte)[] data = block.data;
+			uint addr = segment.addr;
+			const(ubyte)[] data = segment.data;
 			while (data.length)
 			{
 				if ((addr == 0x2e0 || addr == 0x2e2) && data.length >= 2)
@@ -488,5 +470,5 @@ auto instructionSplitter(BinaryBlock block)
 			return 0;
 		}
 	}
-	return Splitter(block);
+	return Splitter(segment);
 }

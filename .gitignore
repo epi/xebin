@@ -1,6 +1,8 @@
-.dub
-xebin.dproj
-xebin
-xebin-test-library
+/.dub
+/xebin
+/xebin-test-library
+/xebin.html
+/version.txt
 *.o
 *.obj
+/*-src.zip
