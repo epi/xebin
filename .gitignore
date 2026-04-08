@@ -1,8 +1,1 @@
-/.dub
-/xebin
-/xebin-test-library
-/xebin.html
-/version.txt
-*.o
-*.obj
-/*-src.zip
+/build
