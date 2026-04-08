@@ -67,7 +67,7 @@ Available methods:
 | `--method` | Algorithm |
 |------------|-----------|
 | `rle`      | Escape-byte run-length encoding |
-| `lz77`     | *(not yet implemented)* |
+| `lz77`     | Escape-byte back-references (10-bit offset, 6-bit length) |
 | `huffman`  | *(not yet implemented)* |
 
 ### Decompress
@@ -141,7 +141,7 @@ namespace xebin {
 
 enum class Method : uint8_t {
     RLE     = 0x01,
-    LZ77    = 0x02,  // not yet implemented
+    LZ77    = 0x02,
     Huffman = 0x04,  // not yet implemented
 };
 

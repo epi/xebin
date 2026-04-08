@@ -9,7 +9,8 @@ enum class Error {
     InvalidSegment,     // end_addr < load_addr
 
     // Decompression
-    TruncatedToken,     // escape byte not followed by a complete (count, value) pair
+    TruncatedToken,       // escape byte not followed by a complete token
+    InvalidBackReference, // LZ77 back-reference offset exceeds output size
 
     // Factory / dispatch
     UnknownMethod,      // make_compressor called with unrecognised Method value

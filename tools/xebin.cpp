@@ -16,8 +16,9 @@ static const char* error_str(xebin::Error e)
     switch (e) {
     case xebin::Error::UnexpectedEof:   return "unexpected end of file";
     case xebin::Error::InvalidSegment:  return "segment end address < load address";
-    case xebin::Error::TruncatedToken:  return "truncated compressed token";
-    case xebin::Error::UnknownMethod:   return "unknown compression method";
+    case xebin::Error::TruncatedToken:        return "truncated compressed token";
+    case xebin::Error::InvalidBackReference:  return "invalid LZ77 back-reference";
+    case xebin::Error::UnknownMethod:         return "unknown compression method";
     }
     return "unknown error";
 }

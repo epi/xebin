@@ -30,10 +30,6 @@ public:
     Result<std::vector<uint8_t>>
     decompress(std::span<const uint8_t> input) const override;
 
-private:
-    // Returns the byte with the lowest frequency in input.
-    // On ties the lowest byte value wins (matches sp.asm Lac62 iteration).
-    static uint8_t find_escape(std::span<const uint8_t> input);
 };
 
 } // namespace xebin

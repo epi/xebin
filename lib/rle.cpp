@@ -1,29 +1,6 @@
 #include "xebin/rle.h"
-#include <array>
 
 namespace xebin {
-
-// ---------------------------------------------------------------------------
-// Find the byte with the lowest frequency in input.
-// Matches sp.asm Lac62–Lac85: iterate 0..255, update only on strict
-// less-than, so the lowest byte value wins on ties.
-// ---------------------------------------------------------------------------
-uint8_t RLECompressor::find_escape(std::span<const uint8_t> input)
-{
-    std::array<uint32_t, 256> freq{};
-    for (uint8_t b : input)
-        ++freq[b];
-
-    uint8_t escape = 0;
-    uint32_t min_freq = freq[0];
-    for (int i = 1; i < 256; ++i) {
-        if (freq[i] < min_freq) {
-            min_freq = freq[i];
-            escape = static_cast<uint8_t>(i);
-        }
-    }
-    return escape;
-}
 
 // ---------------------------------------------------------------------------
 // Compress — sp.asm Lad92
