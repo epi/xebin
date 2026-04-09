@@ -14,6 +14,9 @@ enum class Error {
 
     // Factory / dispatch
     UnknownMethod,      // make_compressor called with unrecognised Method value
+
+    // Assembler
+    AssemblyFailed,     // assembly error (details via DiagnosticConsumer)
 };
 
 template<typename T>

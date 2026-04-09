@@ -14,6 +14,7 @@ add_library(libxebin STATIC
     lib/compress.cpp
     lib/rle.cpp
     lib/lz77.cpp
+    lib/assembler.cpp
 )
 set_target_properties(libxebin PROPERTIES OUTPUT_NAME xebin)
 target_include_directories(libxebin PUBLIC include)
@@ -42,3 +43,8 @@ add_executable(test_lz77 tests/test_lz77.cpp)
 target_link_libraries(test_lz77 PRIVATE libxebin Catch2::Catch2WithMain)
 target_compile_options(test_lz77 PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME lz77 COMMAND test_lz77)
+
+add_executable(test_assembler tests/test_assembler.cpp)
+target_link_libraries(test_assembler PRIVATE libxebin Catch2::Catch2WithMain)
+target_compile_options(test_assembler PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME assembler COMMAND test_assembler)
