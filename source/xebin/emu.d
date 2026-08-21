@@ -9,6 +9,11 @@ private ushort makeWord(uint b1, uint b0)
 	return cast(ushort) ((b1 << 8) | b0);
 }
 
+string substOperand(string expr, string read, string writeOpen)
+{
+	return expr.replace("@w(", writeOpen).replace("@r", read);
+}
+
 enum adc =
 q{
 	uint arg = ld(addr);
@@ -47,7 +52,7 @@ q{
 
 enum sbc =
 q{
-	ubyte operand = @;
+	ubyte operand = @r;
 	ubyte arg = cast(ubyte) ~operand;
 	ubyte oa = a;
 	uint tmp = oa + arg + cflag;
@@ -82,71 +87,49 @@ enum and = q{ setNZ(a &= ld(addr)); };
 enum eor = q{ setNZ(a ^= ld(addr)); };
 enum inc = q{ setNZ(st(addr, ld(addr) + 1)); };
 enum dec = q{ setNZ(st(addr, ld(addr) - 1)); };
-enum asl = q{ ubyte tmp = @; cflag = (tmp & 0x80) != 0; tmp <<= 1; setNZ(@ = tmp); };
+enum asl =
+q{
+	ubyte tmp = @r;
+	cflag = (tmp & 0x80) != 0;
+	tmp <<= 1;
+	setNZ(tmp);
+	@w(tmp);
+};
 enum rol =
 q{
-	ubyte tmp = @;
+	ubyte tmp = @r;
 	bool nc = (tmp & 0x80) != 0;
 	tmp = cast(ubyte) ((tmp << 1) | cflag);
 	cflag = nc;
-	setNZ(@ = tmp);
+	setNZ(tmp);
+	@w(tmp);
 };
 enum lsr =
 q{
-	cflag = @ & 1;
-	setNZ(@ >>>= 1);
+	ubyte tmp = @r;
+	cflag = (tmp & 1) != 0;
+	tmp >>>= 1;
+	setNZ(tmp);
+	@w(tmp);
 };
 enum ror =
 q{
-	ubyte tmp = @;
-	bool nc = tmp & 1;
-	setNZ(@ = cast(ubyte) ((tmp >>> 1) | (cflag ? 0x80 : 0)));
+	ubyte tmp = @r;
+	bool nc = (tmp & 1) != 0;
+	tmp = cast(ubyte) ((tmp >>> 1) | (cflag ? 0x80 : 0));
 	cflag = nc;
+	setNZ(tmp);
+	@w(tmp);
 };
 enum bit =
 q{
-	zflag = (a & @) == 0;
-	nflag = (@ & 0x80) != 0;
-	vflag = (@ & 0x40) != 0;
+	ubyte tmp = @r;
+	zflag = (a & tmp) == 0;
+	nflag = (tmp & 0x80) != 0;
+	vflag = (tmp & 0x40) != 0;
 };
-enum tsb = q{ zflag = (a & @) == 0; @ = cast(ubyte) (@ | a); };
-enum trb = q{ zflag = (a & @) == 0; @ = cast(ubyte) (@ & ~a); };
-
-private immutable ubyte[256] baseCycles =
-{
-	ubyte[256] c;
-	foreach (ref v; c)
-		v = 2; // implied / immediate / accumulator / relative (branch not taken)
-	void set(ubyte cyc, const(ubyte)[] ops)
-	{
-		foreach (o; ops)
-			c[o] = cyc;
-	}
-	set(3, [0x05, 0x24, 0x25, 0x45, 0x65, 0x84, 0x85, 0x86, 0xa4, 0xa5, 0xa6,
-		0xc4, 0xc5, 0xe4, 0xe5,           // zp load/store/ALU, BIT zp, CPx/CPy zp
-		0x64,                             // STZ zp
-		0x08, 0x48, 0x5a, 0xda,           // PHP PHA PHY PHX
-		0x4c]);                           // JMP abs
-	set(4, [0x0d, 0x2c, 0x2d, 0x4d, 0x6d, 0x8c, 0x8d, 0x8e, 0x9c, 0xac, 0xad,
-		0xae, 0xcc, 0xcd, 0xec, 0xed,     // abs load/store/ALU, BIT abs, STZ abs
-		0x15, 0x35, 0x55, 0x75, 0xf5, 0x95, 0xb5, 0x74,
-		0x94, 0x96, 0xb4, 0xb6, 0xd5, // zp,X load/store/ALU, STZ zp,X
-		0x19, 0x1d, 0x39, 0x3d, 0x59, 0x5d, 0x79, 0x7d, // abs,X/Y load/ALU
-		0xb9, 0xbc, 0xbd, 0xbe, 0xd9, 0xdd, 0xf9, 0xfd,
-		0x28, 0x68, 0x7a, 0xfa]);         // PLP PLA PLY PLX
-	set(5, [0x06, 0x26, 0x46, 0x66, 0xc6, 0xe6,         // RMW zp
-		0x11, 0x31, 0x51, 0x71, 0xb1, 0xd1, 0xf1,      // (zp),Y
-		0x99, 0x9d, 0x9e,                              // STA abs,Y/X, STZ abs,X
-		0x6c]);                                        // JMP (abs)
-	set(6, [0x20, 0x60, 0x40,                          // JSR RTS RTI
-		0x01, 0x21, 0x41, 0x61, 0x81, 0xa1, 0xc1, 0xe1, // (zp,X)
-		0x0e, 0x2e, 0x4e, 0x6e, 0xce, 0xee,            // RMW abs
-		0x91,                                          // STA (zp),Y
-		0x16, 0x36, 0x56, 0x76, 0xd6, 0xf6]);          // RMW zp,X
-	set(7, [0x00,                                       // BRK
-		0x1e, 0x3e, 0x5e, 0x7e, 0xde, 0xfe]);          // RMW abs,X
-	return c;
-}();
+enum tsb = q{ ubyte tmp = @r; zflag = (a & tmp) == 0; @w(cast(ubyte) (tmp | a)); };
+enum trb = q{ ubyte tmp = @r; zflag = (a & tmp) == 0; @w(cast(ubyte) (tmp & ~a)); };
 
 ///
 enum CpuVariant {
@@ -167,30 +150,78 @@ enum bool hasBitOps(CpuVariant v) =
 /// WAI and STP, added by the W65C02S; NOPs everywhere else.
 enum bool hasWaiStp(CpuVariant v) = v == CpuVariant.wdc_w65c02s;
 
-/**	The do-nothing tracing policy, and the interface every tracer implements.
+/**	The do-nothing observer, and the interface every observer implements.
 
-	`Emulator` calls these on every instruction and every `ld`/`st`. Because the
+	`Emulator` reports each instruction and each bus access here. Because the
 	policy is a template parameter rather than a runtime flag, an emulator built
-	with `NoTrace` has no tracing code in it at all -- the hooks are empty and
-	inline away, taking the arguments with them. That is worth roughly 40% of
-	throughput compared with testing a `bool` in the same places.
+	with `NoObserver` has none of this code in it -- the hooks are empty and
+	inline away, taking their arguments with them. Measured at ~50% of
+	throughput versus testing a `bool` in the same places.
 
-	See `xebin.trace.CpuTracer` for one that actually prints something.
+	On a 6502 every cycle is exactly one bus access, so the access stream is
+	what a timing model needs; `idle` reports the cycles that do not carry an
+	operand, whose addresses still take part in DRAM page-mode accounting.
+
+	See `xebin.trace.CpuTracer` and `UniformTicks` for real ones, and `Compose`
+	to install several at once.
 */
-struct NoTrace
+struct NoObserver
 {
 	/// Called after the opcode is fetched, with pc still on the opcode.
 	void instruction(E)(E emu) {}
-	void read(ushort addr, ubyte value) {}   /// Called from `ld`.
-	void write(ushort addr, ubyte value) {}  /// Called from `st`.
+	void fetch(ushort addr, ubyte value) {} /// Opcode or operand read via pc.
+	void read(ushort addr, ubyte value) {}  /// Data read; from `ld`.
+	void write(ushort addr, ubyte value) {} /// Data write; from `st`.
+	void idle(ushort addr) {}               /// A cycle that carries no operand.
 	/// Called once the instruction is done, to emit whatever accumulated.
 	void endInstruction() {}
 }
 
-class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
+/**	Installs several observers at once, forwarding every hook to each in turn.
+
+	`Compose!(CpuTracer, UniformTicks)` traces and counts ticks; reach the
+	members through `observer.get!0`, `observer.get!1`.
+*/
+struct Compose(Observers...)
 {
-	/// Tracing policy instance; configure it before running.
-	Trace tracer;
+	Observers observers;
+
+	/// The `n`th composed observer, for configuring or reading it back.
+	ref auto get(size_t n)() { return observers[n]; }
+
+	void instruction(E)(E emu) { foreach (ref o; observers) o.instruction(emu); }
+	void fetch(ushort addr, ubyte value) { foreach (ref o; observers) o.fetch(addr, value); }
+	void read(ushort addr, ubyte value) { foreach (ref o; observers) o.read(addr, value); }
+	void write(ushort addr, ubyte value) { foreach (ref o; observers) o.write(addr, value); }
+	void idle(ushort addr) { foreach (ref o; observers) o.idle(addr); }
+	void endInstruction() { foreach (ref o; observers) o.endInstruction(); }
+}
+
+///	Counts every bus access as the same number of ticks.
+struct UniformTicks
+{
+	long ticks;             /// Elapsed ticks.
+	int ticksPerAccess = 1; /// Or 5 for Lynx nominal (no same-page optimization).
+
+	void instruction(E)(E emu) {}
+	void fetch(ushort addr, ubyte value) { ticks += ticksPerAccess; }
+	void read(ushort addr, ubyte value) { ticks += ticksPerAccess; }
+	void write(ushort addr, ubyte value) { ticks += ticksPerAccess; }
+	void idle(ushort addr) { ticks += ticksPerAccess; }
+	void endInstruction() {}
+}
+
+class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserver)
+{
+	/// Observer policy instance; configure it before running.
+	Observer observer;
+
+	/// Instructions retired. Always counted -- it is one add, and it gives a
+	/// run budget that does not depend on any timing model being installed.
+	long instructions;
+
+	/// `run`/`resume` return once `instructions` reaches this; -1 disables.
+	long instructionLimit = -1;
 
 	private ubyte[] memory;
 	private void delegate()[ubyte] traps;
@@ -206,9 +237,6 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 	///	The 64K address space, for hosts and debuggers that need to load or
 	///	inspect it in bulk. CPU accesses go through `ld` and `st`.
 	@property ubyte[] ram() { return memory; }
-
-	long cycles;
-	long cycleLimit = -1;
 
 	bool stopOnEmptyStackRts = true;
 
@@ -246,96 +274,112 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 
 	void push(uint b)
 	{
-		memory[0x100 + sp--] = cast(ubyte) b;
+		const addr = cast(ushort) (0x100 + sp--);
+		memory[addr] = cast(ubyte) b;
+		observer.write(addr, cast(ubyte) b);
 	}
 
 	ubyte pop()
 	{
-		return memory[0x100 + ++sp];
+		const addr = cast(ushort) (0x100 + ++sp);
+		observer.read(addr, memory[addr]);
+		return memory[addr];
 	}
 
 	ubyte fetchByte()
 	{
-		return memory[++pc];
+		++pc;
+		observer.fetch(pc, memory[pc]);
+		return memory[pc];
 	}
 
+	/// Two fetches, low byte first, as the hardware does them.
 	ushort fetchWord()
 	{
-		pc += 2;
-		ushort result = makeWord(memory[pc], memory[pc - 1]);
-		return result;
+		const lo = fetchByte();
+		const hi = fetchByte();
+		return makeWord(hi, lo);
+	}
+
+	/// Reads a word through the bus, low byte first. For CPU-visible indirection
+	/// only -- `dpeek` is the untimed host view.
+	private ushort readWord(ushort addr, ushort hiAddr)
+	{
+		const lo = ld(addr);
+		const hi = ld(hiAddr);
+		return makeWord(hi, lo);
 	}
 
 	void doAccumulator(string expr)()
 	{
-		mixin(replace(expr, "@", "a"));
+		mixin(substOperand(expr, "a", "a = ("));
 	}
 
 	void doImmediate(string expr)()
 	{
 		++pc;
 		alias pc addr;
-		mixin(replace(expr, "@", "memory[pc]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doAbsolute(string expr)(ubyte index = 0)
 	{
 		ushort addr = fetchWord();
 		addr += index;
-		mixin(replace(expr, "@", "memory[addr]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doAbsoluteZP(string expr)(ubyte index = 0)
 	{
 		ubyte addr = fetchByte();
 		addr += index;
-		mixin(replace(expr, "@", "memory[addr]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doIndirectY(string expr)()
 	{
-		ushort addr = fetchByte();
-		addr = makeWord(memory[(addr + 1) & 0xff], memory[addr]);
+		const ushort zp = fetchByte();
+		ushort addr = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
 		addr += y;
-		mixin(replace(expr, "@", "memory[addr]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doIndirectX(string expr)()
 	{
-		ushort addr = fetchByte();
-		addr += x;
-		addr = makeWord(memory[(addr + 1) & 0xff], memory[addr & 0xff]);
-		mixin(replace(expr, "@", "memory[addr]"));
+		ushort zp = fetchByte();
+		zp = (zp + x) & 0xff;
+		const addr = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	static if (isCmos!cpuVariant)
 	void doIndirectZP(string expr)()
 	{
-		ushort zp = fetchByte();
-		ushort addr = makeWord(memory[(zp + 1) & 0xff], memory[zp]);
-		mixin(replace(expr, "@", "memory[addr]"));
+		const ushort zp = fetchByte();
+		const addr = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	static if (isCmos!cpuVariant)
 	void doBitSetReset(ubyte mask, bool set)()
 	{
 		const ubyte addr = fetchByte();
+		const ubyte value = ld(addr);
 		static if (set)
-			memory[addr] |= mask;
+			st(addr, value | mask);
 		else
-			memory[addr] &= cast(ubyte) ~mask;
+			st(addr, value & ~mask);
 	}
 
 	static if (hasBitOps!cpuVariant)
 	void doBitBranch(ubyte mask, bool branchIfSet)()
 	{
 		const ubyte zp = fetchByte();
-		const bool isSet = (memory[zp] & mask) != 0;
+		const bool isSet = (ld(zp) & mask) != 0;
 		const byte offs = fetchByte();
 		if (isSet == branchIfSet)
 		{
 			pc = cast(ushort) (pc + offs);
-			++cycles;
 		}
 	}
 
@@ -344,13 +388,9 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 		byte offs = fetchByte();
 		if (mixin(pred))
 		{
-			ushort oldpc = pc;
 			pc++;
 			pc += offs;
 			pc--;
-			++cycles;                                   // taken branch: +1
-			if (((oldpc + 1) & 0xff00) != ((pc + 1) & 0xff00))
-				++cycles;                               // crosses a page: +1 more
 		}
 	}
 
@@ -362,14 +402,14 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 
 	ubyte ld(ushort addr)
 	{
-		tracer.read(addr, memory[addr]);
+		observer.read(addr, memory[addr]);
 		return memory[addr];
 	}
 
 	ubyte st(ushort addr, uint val)
 	{
 		memory[addr] = cast(ubyte) val;
-		tracer.write(addr, memory[addr]);
+		observer.write(addr, memory[addr]);
 		return cast(ubyte) val;
 	}
 
@@ -388,11 +428,11 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 	{
 		for (;;)
 		{
-			if (cycleLimit >= 0 && cycles >= cycleLimit)
+			if (instructionLimit >= 0 && instructions >= instructionLimit)
 				return;
+			++instructions;
 			ubyte instr = fetchByte();
-			cycles += baseCycles[instr];
-			tracer.instruction(this);
+			observer.instruction(this);
 
 			dispatch: switch (instr)
 			{
@@ -430,7 +470,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 						{
 							--pc;   // JAM: report the address of the $02 itself
 							stopped = true;
-							tracer.endInstruction();
+							observer.endInstruction();
 							return;
 						}
 					}
@@ -537,7 +577,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 				ad |= cast(ushort) (pop() << 8);
 				if (stopOnEmptyStackRts && sp == 0xff)
 				{
-					tracer.endInstruction();
+					observer.endInstruction();
 					return;
 				}
 				pc = ad;
@@ -650,7 +690,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 			case 0xda: push(x); break;                        // PHX
 			case 0xfa: setNZ(x = pop()); break;               // PLX
 			case 0x80: doBranch!"true"(); break;              // BRA
-			case 0x89: ++pc; zflag = (a & memory[pc]) == 0; break; // BIT #imm (65C02: Z only)
+			case 0x89: zflag = (a & fetchByte()) == 0; break; // BIT #imm (65C02: Z only)
 			case 0x64: doAbsoluteZP!"st(addr, 0);"(); break;  // STZ zp
 			case 0x74: doAbsoluteZP!"st(addr, 0);"(x); break; // STZ zp,X
 			case 0x9c: doAbsolute!"st(addr, 0);"(); break;    // STZ abs
@@ -703,7 +743,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 				static if (hasWaiStp!cpuVariant)
 				{
 					stopped = true;
-					tracer.endInstruction();
+					observer.endInstruction();
 					return;
 				}
 				else
@@ -720,18 +760,18 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Trace = NoTrace)
 			static foreach (op; [0x22, 0x42, 0x62, 0x82, 0xc2, 0xe2,
 				0x44, 0x54, 0xd4, 0xf4])
 			{
-			case op: ++pc; break dispatch;                     // two bytes
+			case op: fetchByte(); break dispatch;               // two bytes
 			}
 			static foreach (op; [0x5c, 0xdc, 0xfc])
 			{
-			case op: pc += 2; break dispatch;                  // three bytes
+			case op: fetchByte(); fetchByte(); break dispatch;  // three bytes
 			}
 			}
 			default:
 				throw new Exception(
 					format("Unimplemented instruction %02X", instr));
 			}
-			tracer.endInstruction();
+			observer.endInstruction();
 		}
 	}
 
@@ -761,7 +801,7 @@ unittest
 		int fired;
 		emu.installTrap(0x37, delegate void() { fired++; emu.a = 0x5a; });
 		load(emu, 0x1000, [ubyte(0x02), 0x37, 0xe8]);   // $02 $37 ; inx
-		emu.cycleLimit = 4;
+		emu.instructionLimit = 2;
 		emu.run();
 		assert(fired == 1);
 		assert(emu.a == 0x5a);      // the handler wrote through to the CPU
@@ -776,7 +816,7 @@ unittest
 		emu.installTrap(0, delegate void() { seen ~= 0; });
 		emu.installTrap(1, delegate void() { seen ~= 1; });
 		load(emu, 0x1000, [ubyte(0x02), 0x01, 0x02, 0x00]);
-		emu.cycleLimit = 4;
+		emu.instructionLimit = 2;
 		emu.run();
 		assert(seen == [1, 0]);
 	}
@@ -786,7 +826,7 @@ unittest
 	{
 		auto emu = new Emulator!(CpuVariant.mos_6502)();
 		load(emu, 0x1000, [ubyte(0x02), 0x37, 0xe8]);
-		emu.cycleLimit = 4;
+		emu.instructionLimit = 2;
 		emu.run();
 		assert(emu.stopped);
 		assert(emu.pc == 0x1000);
@@ -799,7 +839,7 @@ unittest
 	{{
 		auto emu = new Emulator!v();
 		load(emu, 0x1000, [ubyte(0x02), 0x37, 0xe8]);
-		emu.cycleLimit = 4;
+		emu.instructionLimit = 2;
 		emu.run();
 		assert(!emu.stopped, v.stringof);
 		assert(emu.x == 1, v.stringof);   // both bytes skipped, inx ran
@@ -812,8 +852,8 @@ private version(unittest) {
 	enum ushort entryPoint = 0x0400;
 	enum ushort testCaseVar = 0x0200;
 
-	enum long chunkCycles = 1_000_000;
-	enum long budgetCycles = 500_000_000;
+	enum long chunkInstructions = 1_000_000;
+	enum long budgetInstructions = 200_000_000;
 
 	bool isStuckSelfLoop(E)(E emu, ushort address)
 	{
@@ -843,13 +883,13 @@ private version(unittest) {
 			emu.st(cast(ushort) i, b);
 		emu.sp = 0xff;
 		emu.pc = entryPoint;
-		emu.cycles = 0;
+		emu.instructions = 0;
 		emu.stopOnEmptyStackRts = false;
 
 		bool started;
-		while (emu.cycles < budgetCycles)
+		while (emu.instructions < budgetInstructions)
 		{
-			emu.cycleLimit = emu.cycles + chunkCycles;
+			emu.instructionLimit = emu.instructions + chunkInstructions;
 			if (started)
 				emu.resume();
 			else
@@ -862,8 +902,8 @@ private version(unittest) {
 					return candidate;
 		}
 		throw new Exception(format(
-			"did not settle within %d cycles (pc=$%04X, test_case=%d)",
-			budgetCycles, emu.pc, emu.ld(testCaseVar)));
+			"did not settle within %d instructions (pc=$%04X, test_case=%d)",
+			budgetInstructions, emu.pc, emu.ld(testCaseVar)));
 	}
 
 	bool check(E)(E emu, string what, immutable(ubyte)[] image,
@@ -876,7 +916,7 @@ private version(unittest) {
 			const trap = runToSelfLoop(emu, image);
 			if (trap == successAddress)
 			{
-				writefln("PASS (success trap $%04X, %d cycles)", trap, emu.cycles);
+				writefln("PASS (success trap $%04X, %d instructions)", trap, emu.instructions);
 				return true;
 			}
 			writefln("FAIL -- stopped at $%04X, expected $%04X, test_case=%d",

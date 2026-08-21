@@ -72,6 +72,15 @@ struct CpuTracer
 		line.put(disassembleOne(emu.ram, addr));
 	}
 
+	/**	Opcode and operand fetches are not shown: the disassembly on the same
+		line already accounts for those bytes, so printing them again would
+		bury the data accesses that are the interesting part.
+	*/
+	void fetch(ushort addr, ubyte value) {}
+
+	/// Internal cycles carry no operand, so there is nothing to show.
+	void idle(ushort addr) {}
+
 	/// Called from `Emulator.ld`.
 	void read(ushort addr, ubyte value)
 	{
@@ -113,12 +122,12 @@ unittest
 
 	auto emu = new Emulator!(CpuVariant.mos_6502, CpuTracer)();
 	string[] lines;
-	emu.tracer.sink = delegate void(const(char)[] l) { lines ~= l.idup; };
+	emu.observer.sink = delegate void(const(char)[] l) { lines ~= l.idup; };
 
 	// lda #$42 ; sta $80
 	emu.ram[0x2000 .. 0x2005] = [ubyte(0xa9), 0x42, 0x85, 0x80, 0x00];
 	emu.pc = 0x2000;
-	emu.cycleLimit = 5;
+	emu.instructionLimit = 2;
 	emu.run();
 
 	assert(lines.length == 2, "one line per instruction");
