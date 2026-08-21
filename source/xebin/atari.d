@@ -47,6 +47,9 @@ class AtariHost(E)
 	/// Traces every CIO call to stderr.
 	bool ioTrace;
 
+	/// Reports each block as it is loaded, and the init/run addresses taken.
+	bool traceLoad;
+
 	this(E emu)
 	{
 		this.emu = emu;
@@ -93,7 +96,7 @@ class AtariHost(E)
 
 		foreach (block; blocks)
 		{
-			if (emu.cpuTrace)
+			if (traceLoad)
 			{
 				writefln("Load %d bytes at %04X-%04X", block.length,
 					block.addr, block.end);
@@ -101,14 +104,14 @@ class AtariHost(E)
 			emu.ram[block.addr .. block.addr + block.length] = block.data[];
 			if (block.isInit)
 			{
-				if (emu.cpuTrace)
+				if (traceLoad)
 					writefln("Init at %04x", block.initAddress);
 				emu.jsr(block.initAddress);
 			}
 		}
 		if (ushort runaddr = emu.dpeek(0x2e0))
 		{
-			if (emu.cpuTrace)
+			if (traceLoad)
 				writefln("Run at %04X", runaddr);
 			emu.jsr(runaddr);
 		}

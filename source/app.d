@@ -31,6 +31,7 @@ import xebin.flashpack;
 import xebin.disasm;
 import xebin.emu;
 import xebin.atari;
+import xebin.trace;
 
 int address = 0xffff;
 int position;
@@ -206,14 +207,22 @@ void disassembly(string[] args)
 	}
 }
 
+private void runEmulator(E)(BinaryBlock[] blocks)
+{
+	auto emu = new E();
+	auto atari = atariHost(emu);
+	atari.ioTrace = ioTrace;
+	atari.traceLoad = cpuTrace;
+	atari.loadAndRun(blocks);
+}
+
 void run(string[] args)
 {
 	auto blocks = BinaryFileReader(InputFiles(args).front).readFile();
-	auto emu = new Emulator!();
-	emu.cpuTrace = cpuTrace;
-	auto atari = atariHost(emu);
-	atari.ioTrace = ioTrace;
-	atari.loadAndRun(blocks);
+	if (cpuTrace)
+		runEmulator!(Emulator!(CpuVariant.mos_6502, CpuTracer))(blocks);
+	else
+		runEmulator!(Emulator!())(blocks);
 }
 
 void printHelp(string[] args)
