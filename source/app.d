@@ -30,6 +30,7 @@ import xebin.binary;
 import xebin.flashpack;
 import xebin.disasm;
 import xebin.emu;
+import xebin.atari;
 
 int address = 0xffff;
 int position;
@@ -101,7 +102,7 @@ void list(string[] args)
 				}
 			}
 		}
-			
+
 	}
 }
 
@@ -138,7 +139,7 @@ void extract(string[] args)
 		}
 		if (bn >= blocks.length)
 			continue;
-		
+
 		if (verbose && outputFile.length)
 		{
 			writeln(file.name, ":");
@@ -208,10 +209,11 @@ void disassembly(string[] args)
 void run(string[] args)
 {
 	auto blocks = BinaryFileReader(InputFiles(args).front).readFile();
-	auto emu = new Emulator();
-	emu.ioTrace = ioTrace;
+	auto emu = new Emulator!();
 	emu.cpuTrace = cpuTrace;
-	emu.loadAndRun(blocks);
+	auto atari = atariHost(emu);
+	atari.ioTrace = ioTrace;
+	atari.loadAndRun(blocks);
 }
 
 void printHelp(string[] args)
@@ -226,7 +228,7 @@ void printHelp(string[] args)
 		" e[xtract] [-n=pos] [-r] [-o=fn] [-v]  extract block\n" ~
 /+ TODO:
 		" r[emove]  [-n=pos] [-o=fn] [-v]       remove block from file\n" ~
-		" i[nsert]  [-n=pos] [-a=ad] [-o=fn] [-v]  insert block into file\n" ~ 
+		" i[nsert]  [-n=pos] [-a=ad] [-o=fn] [-v]  insert block into file\n" ~
 		" o[ptimize] [-o=fn] [-i]               optimize file\n +/
 		" d[isasm]  [-o=fn]                     disassemble blocks\n" ~
 		" r[un]                                 run in a simple emulator\n" ~
@@ -273,7 +275,7 @@ int parseInt(string n)
 		n = n[2 .. $];
 		base = 16;
 	}
-	
+
 	foreach (k; n.toUpper())
 	{
 		uint digit = uint.max;
@@ -284,10 +286,10 @@ int parseInt(string n)
 			digit = c - ('A' - 10);
 		if (digit >= base)
 			throw new Exception("Invalid number");
-		
+
 		result = result * base + digit;
 	}
-	
+
 	return minus ? -result : result;
 }
 
