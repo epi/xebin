@@ -25,13 +25,14 @@ module xebin.flashpack;
 
 import std.stdio;
 import std.exception;
+import std.format : format;
 import std.string;
 import std.algorithm;
 import std.range;
 import std.typecons;
 
 import xebin.binary;
-import xebin.xasm;
+import xasm;
 
 enum CompressionMethod
 {
@@ -47,6 +48,33 @@ class FlashPackException : Exception
 	{
 		super(m);
 	}
+}
+
+/**	Assembles one of the built-in depacker sources with `definitions`
+	predefined as labels.
+
+	xasm delegates all file and diagnostic I/O to callbacks, so the source is
+	handed over from memory and any diagnostic is turned into an exception --
+	the depacker sources are compile-time constants, so a diagnostic can only
+	mean a bug here, never bad user input.
+
+	Returns: the assembler, so the caller can read both `object()` and the
+	label table.
+*/
+private Assembler assembleDepacker(string source, int[string] definitions)
+{
+	auto assembler = new Assembler(
+		delegate immutable(ubyte)[](string path) { return source.representation; },
+		delegate immutable(ubyte)[](string path, long offset, long length) { return null; },
+		delegate void(in Diagnostic d) {
+			if (d.severity == Severity.error)
+				throw new FlashPackException(
+					format("depacker source, line %d: %s", d.line, d.message));
+		});
+	foreach (name, value; definitions)
+		assembler.commandLineDefinitions ~= format("%s=%d", name, value);
+	assembler.assemble("depacker");
+	return assembler;
 }
 
 BinaryBlock[] flashPack(BinaryBlock[] blocks, bool disableOs = false, ushort addr = 0xffff, bool endaddr = false)
@@ -106,34 +134,32 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 	auto blk = blocks[0];
 	if (blk.addr == runAddr)
 	{
-		auto xasm = new Assembler;
-		xasm.defineLabel("ADDRESS", blk.addr + DepackerLength.FLASHPACK_10);
-		xasm.defineLabel("CODEADDR", blk.addr);
-		xasm.assemblyString(depackerSrc10);
-		if (xasm.result[] == blk.data[0 .. xasm.result.length])
+		auto depacker = assembleDepacker(depackerSrc10, [
+			"ADDRESS": cast(int) (blk.addr + DepackerLength.FLASHPACK_10),
+			"CODEADDR": cast(int) blk.addr ]);
+		const code = depacker.object();
+		if (code[] == blk.data[0 .. code.length])
 			return CompressionMethod.FLASHPACK_10;
 	}
 	if (blk.addr <= runAddr && runAddr < blk.addr + blk.length)
 	{
 		if (blk.length > DepackerLength.FLASHPACK_21)
 		{
-			auto xasm = new Assembler;
-			xasm.defineLabel("ADDRESS", blk.addr);
-			xasm.defineLabel("CODEADDR", cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21));
-			xasm.defineLabel("OS_DISABLED", 0);
-			xasm.assemblyString(depackerSrc21);
-			if (xasm.result[] == blk.data[blk.length - DepackerLength.FLASHPACK_21 .. $])
+			auto depacker = assembleDepacker(depackerSrc21, [
+				"ADDRESS": cast(int) blk.addr,
+				"CODEADDR": cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21),
+				"OS_DISABLED": 0 ]);
+			if (depacker.object()[] == blk.data[blk.length - DepackerLength.FLASHPACK_21 .. $])
 				return CompressionMethod.FLASHPACK_21;
 		}
 		
 		if (blk.length > DepackerLength.FLASHPACK_21_OS_DISABLED)
 		{
-			auto xasm = new Assembler;
-			xasm.defineLabel("ADDRESS", blk.addr);
-			xasm.defineLabel("CODEADDR", cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED));
-			xasm.defineLabel("OS_DISABLED", 1);
-			xasm.assemblyString(depackerSrc21);
-			if (xasm.result[] == blk.data[blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED .. $])
+			auto depacker = assembleDepacker(depackerSrc21, [
+				"ADDRESS": cast(int) blk.addr,
+				"CODEADDR": cast(int) (blk.addr + blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED),
+				"OS_DISABLED": 1 ]);
+			if (depacker.object()[] == blk.data[blk.length - DepackerLength.FLASHPACK_21_OS_DISABLED .. $])
 				return CompressionMethod.FLASHPACK_21_OS_DISABLED;
 		}
 	}
@@ -293,14 +319,13 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	result.addr = addr;
 
 	// append depacker
-	auto xasm = new Assembler;
-	xasm.defineLabel("ADDRESS", result.addr);
-	xasm.defineLabel("CODEADDR", cast(int) (result.addr + result.length));
-	xasm.defineLabel("OS_DISABLED", disableOs ? 1 : 0);
-	xasm.assemblyString(depackerSrc21);
-	result.data ~= xasm.result;
+	auto depacker = assembleDepacker(depackerSrc21, [
+		"ADDRESS": cast(int) result.addr,
+		"CODEADDR": cast(int) (result.addr + result.length),
+		"OS_DISABLED": disableOs ? 1 : 0 ]);
+	result.data ~= depacker.object();
 
-	return [ result, makeInitBlock(cast(ushort) (xasm.labels["START"].value)) ];
+	return [ result, makeInitBlock(cast(ushort) (depacker.getLabel("START").value)) ];
 }
 
 struct Bits
@@ -542,33 +567,25 @@ enum DepackerLength
 unittest
 {
 	debug writeln("unittest DepackerLength.FLASHPACK_21");
-	auto xasm = new Assembler();
-	xasm.defineLabel("ADDRESS", 0x805a);
-	xasm.defineLabel("CODEADDR", 0x8000);
-	xasm.defineLabel("OS_DISABLED", 0);
-	xasm.assemblyString(depackerSrc21);
-	assert(xasm.result.length == DepackerLength.FLASHPACK_21);
+	auto depacker = assembleDepacker(depackerSrc21, [
+		"ADDRESS": 0x805a, "CODEADDR": 0x8000, "OS_DISABLED": 0 ]);
+	assert(depacker.object().length == DepackerLength.FLASHPACK_21);
 }
 
 unittest
 {
 	debug writeln("unittest DepackerLength.FLASHPACK_21_OS_DISABLED");
-	auto xasm = new Assembler();
-	xasm.defineLabel("ADDRESS", 0x806b);
-	xasm.defineLabel("CODEADDR", 0x8000);
-	xasm.defineLabel("OS_DISABLED", 1);
-	xasm.assemblyString(depackerSrc21);
-	assert(xasm.result.length == DepackerLength.FLASHPACK_21_OS_DISABLED);
+	auto depacker = assembleDepacker(depackerSrc21, [
+		"ADDRESS": 0x806b, "CODEADDR": 0x8000, "OS_DISABLED": 1 ]);
+	assert(depacker.object().length == DepackerLength.FLASHPACK_21_OS_DISABLED);
 }
 
 unittest
 {
 	debug writeln("unittest DepackerLength.FLASHPACK_10");
-	auto xasm = new Assembler();
-	xasm.defineLabel("ADDRESS", 0x805e);
-	xasm.defineLabel("CODEADDR", 0x8000);
-	xasm.assemblyString(depackerSrc10);
-	assert(xasm.result.length == DepackerLength.FLASHPACK_10);
+	auto depacker = assembleDepacker(depackerSrc10, [
+		"ADDRESS": 0x805e, "CODEADDR": 0x8000 ]);
+	assert(depacker.object().length == DepackerLength.FLASHPACK_10);
 }
 
 unittest

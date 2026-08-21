@@ -1,0 +1,3 @@
+[submodule "ext/xasm"]
+	path = ext/xasm
+	url = git@github.com:epi/xasm.git
