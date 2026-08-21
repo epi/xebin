@@ -1,7 +1,7 @@
 name "xebin"
 description "Atari XL/XE binary file utility"
 authors "Adrian Matoga"
-copyright "Copyright © 2017, Adrian Matoga"
+copyright "Copyright © 2010-2014, 2017, 2023, 2026 Adrian Matoga"
 license "Poetic License"
 
 dependency "xasm" path="ext/xasm"
