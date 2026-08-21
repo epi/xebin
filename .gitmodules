@@ -2,3 +2,6 @@
 	path = ext/xasm
 	url = git@github.com:epi/xasm.git
 	branch = epi/lynx
+[submodule "ext/6502_65C02_functional_tests"]
+	path = ext/6502_65C02_functional_tests
+	url = git@github.com:Klaus2m5/6502_65C02_functional_tests.git

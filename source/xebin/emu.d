@@ -50,19 +50,26 @@ q{
 
 enum sbc =
 q{
-	ubyte arg = cast(ubyte) ~@;
+	ubyte operand = @;
+	ubyte arg = cast(ubyte) ~operand;
+	ubyte oa = a;
+	uint tmp = oa + arg + cflag;
+	ubyte bin = tmp & 0xff;
+	setNZ(bin);
+	vflag = (~(arg ^ oa) & (oa ^ bin) & 0x80) != 0;
 	if (!dflag)
-	{
-		ubyte oa = a;
-		uint tmp = a + arg + cflag;
-		setNZ(a = tmp & 0xff);
-		cflag = tmp >= 0x100;
-		vflag = (~(arg ^ oa) & (oa ^ a) & 0x80) != 0;
-	}
+		a = bin;
 	else
 	{
-		throw new Exception("decimal mode not supported");
+		int al = (oa & 0x0f) - (operand & 0x0f) + cflag - 1;
+		if (al < 0)
+			al = ((al - 0x06) & 0x0f) - 0x10;
+		int res = (oa & 0xf0) - (operand & 0xf0) + al;
+		if (res < 0)
+			res -= 0x60;
+		a = cast(ubyte) res;
 	}
+	cflag = tmp >= 0x100;
 };
 
 enum cmp = q{ ubyte tmp = ld(addr); setNZ(a - tmp); cflag = a >= tmp; };
@@ -104,17 +111,59 @@ q{
 	vflag = (@ & 0x40) != 0;
 };
 
+private immutable ubyte[256] baseCycles =
+{
+	ubyte[256] c;
+	foreach (ref v; c)
+		v = 2; // implied / immediate / accumulator / relative (branch not taken)
+	void set(ubyte cyc, const(ubyte)[] ops)
+	{
+		foreach (o; ops)
+			c[o] = cyc;
+	}
+	set(0, [0xf2]); // emulator trap escape, not a real instruction
+	set(3, [0x05, 0x24, 0x25, 0x45, 0x65, 0x84, 0x85, 0x86, 0xa4, 0xa5, 0xa6,
+		0xc4, 0xc5, 0xe4, 0xe5,           // zp load/store/ALU, BIT zp, CPx/CPy zp
+		0x64,                             // STZ zp
+		0x08, 0x48, 0x5a, 0xda,           // PHP PHA PHY PHX
+		0x4c]);                           // JMP abs
+	set(4, [0x0d, 0x2c, 0x2d, 0x4d, 0x6d, 0x8c, 0x8d, 0x8e, 0x9c, 0xac, 0xad,
+		0xae, 0xcc, 0xcd, 0xec, 0xed,     // abs load/store/ALU, BIT abs, STZ abs
+		0x15, 0x35, 0x55, 0x75, 0xf5, 0x95, 0xb5, 0x74,
+		0x94, 0x96, 0xb4, 0xb6, 0xd5, // zp,X load/store/ALU, STZ zp,X
+		0x19, 0x1d, 0x39, 0x3d, 0x59, 0x5d, 0x79, 0x7d, // abs,X/Y load/ALU
+		0xb9, 0xbc, 0xbd, 0xbe, 0xd9, 0xdd, 0xf9, 0xfd,
+		0x28, 0x68, 0x7a, 0xfa]);         // PLP PLA PLY PLX
+	set(5, [0x06, 0x26, 0x46, 0x66, 0xc6, 0xe6,         // RMW zp
+		0x11, 0x31, 0x51, 0x71, 0xb1, 0xd1, 0xf1,      // (zp),Y
+		0x99, 0x9d, 0x9e,                              // STA abs,Y/X, STZ abs,X
+		0x6c]);                                        // JMP (abs)
+	set(6, [0x20, 0x60, 0x40,                          // JSR RTS RTI
+		0x01, 0x21, 0x41, 0x61, 0x81, 0xa1, 0xc1, 0xe1, // (zp,X)
+		0x0e, 0x2e, 0x4e, 0x6e, 0xce, 0xee,            // RMW abs
+		0x91,                                          // STA (zp),Y
+		0x16, 0x36, 0x56, 0x76, 0xd6, 0xf6]);          // RMW zp,X
+	set(7, [0x00,                                       // BRK
+		0x1e, 0x3e, 0x5e, 0x7e, 0xde, 0xfe]);          // RMW abs,X
+	return c;
+}();
+
 class Emulator
 {
 	private ubyte[] memory;
 	private void delegate()[ubyte] traps;
 	private File[7] iocbs;
 
+	long cycles;
+	long cycleLimit = -1;
+
+	bool stopOnEmptyStackRts = true;
+
 	ubyte a;
 	ubyte x;
 	ubyte y;
 	ushort pc;
-	ubyte sp;
+	ubyte sp = 0xff;
 	bool nflag;
 	bool vflag;
 	bool bflag;
@@ -163,12 +212,14 @@ class Emulator
 		memory[0xfff9] = 0x02;
 		memory[0xfffa] = 0xf8; // nmi vector
 		memory[0xfffb] = 0xff;
+		memory[0xfffe] = 0xf8; // irq/brk vector -- where BRK actually goes
+		memory[0xffff] = 0xff;
 		traps[2] =
 		{
-			ushort baddr = pop();
-			baddr <<= 8;
-			baddr |= pop();
-			baddr -= 1;
+			pop();                                   // P
+			ushort baddr = pop();                    // return address, low byte first
+			baddr |= cast(ushort) (pop() << 8);
+			baddr -= 2;                              // back up over BRK + signature
 			throw new Exception(format("BRK at %04X", baddr));
 		};
 
@@ -201,12 +252,12 @@ class Emulator
 
 	void push(uint b)
 	{
-		memory[--sp + 0x100] = cast(ubyte) b;
+		memory[0x100 + sp--] = cast(ubyte) b;
 	}
 
 	ubyte pop()
 	{
-		return memory[sp++ + 0x100];
+		return memory[0x100 + ++sp];
 	}
 
 	ubyte fetchByte()
@@ -272,6 +323,9 @@ class Emulator
 			pc++;
 			pc += offs;
 			pc--;
+			++cycles;                                   // taken branch: +1
+			if (((oldpc + 1) & 0xff00) != ((pc + 1) & 0xff00))
+				++cycles;                               // crosses a page: +1 more
 		}
 	}
 
@@ -461,9 +515,22 @@ class Emulator
 	void run()
 	{
 		--pc;
+		execute();
+	}
+
+	void resume()
+	{
+		execute();
+	}
+
+	private void execute()
+	{
 		for (;;)
 		{
+			if (cycleLimit >= 0 && cycles >= cycleLimit)
+				return;
 			ubyte instr = fetchByte();
+			cycles += baseCycles[instr];
 			if (cpuTrace)
 			{
 				info.formattedWrite(
@@ -489,6 +556,8 @@ class Emulator
 			switch (instr)
 			{
 			case 0x00:
+				push((pc + 2) >> 8);
+				push((pc + 2) & 0xff);
 				push(
 					(nflag ? 0x80 : 0) |
 					(vflag ? 0x40 : 0) |
@@ -497,20 +566,19 @@ class Emulator
 					(iflag ? 0x04 : 0) |
 					(zflag ? 0x02 : 0) |
 					(cflag ? 0x01 : 0));
-				push((pc + 1) & 0xff);
-				push((pc + 1) >> 8);
-				pc = dpeek(0xfffa);
+				iflag = true;
+				pc = dpeek(0xfffe);
 				--pc;
 				break;
 			case 0x01: doIndirectX!ora(); break;
 			case 0x05: doAbsoluteZP!ora(); break;
 			case 0x06: doAbsoluteZP!asl(); break;
 			case 0x08:
+				// PHP always pushes B set, regardless of how P was last pulled.
 				push(
 					(nflag ? 0x80 : 0) |
 					(vflag ? 0x40 : 0) |
-					0x20 |
-					(bflag ? 0x10 : 0) |
+					0x20 | 0x10 |
 					(dflag ? 0x08 : 0) |
 					(iflag ? 0x04 : 0) |
 					(zflag ? 0x02 : 0) |
@@ -529,8 +597,8 @@ class Emulator
 			case 0x1d: doAbsolute!ora(x); break;
 			case 0x1e: doAbsolute!asl(x); break;
 			case 0x20:
-				push((pc + 2) & 0xff);
 				push((pc + 2) >> 8);
+				push((pc + 2) & 0xff);
 				pc = fetchWord();
 				--pc;
 				break;
@@ -564,11 +632,6 @@ class Emulator
 			case 0x3d: doAbsolute!and(x); break;
 			case 0x3e: doAbsolute!rol(x); break;
 			case 0x40:
-				pc = pop();
-				pc <<= 8;
-				pc |= pop();
-				pc += 1;
-				pc--;
 				{
 					auto p = pop();
 					nflag = (p & 0x80) != 0;
@@ -579,9 +642,11 @@ class Emulator
 					zflag = (p & 0x02) != 0;
 					cflag = (p & 0x01) != 0;
 				}
+				ushort rti = pop();
+				rti |= cast(ushort) (pop() << 8);
+				pc = cast(ushort) (rti - 1);
 				break;
 			case 0x41: doIndirectX!eor(); break;
-			case 0x44: doAbsoluteZP!lsr(); break;
 			case 0x45: doAbsoluteZP!eor(); break;
 			case 0x46: doAbsoluteZP!lsr(); break;
 			case 0x48: push(a); break;
@@ -597,18 +662,16 @@ class Emulator
 			case 0x51: doIndirectY!eor(); break;
 			case 0x55: doAbsoluteZP!eor(x); break;
 			case 0x56: doAbsoluteZP!lsr(x); break;
+			case 0x58: iflag = false; break;
 			case 0x59: doAbsolute!eor(y); break;
 			case 0x5d: doAbsolute!eor(x); break;
 			case 0x5e: doAbsolute!lsr(x); break;
 			case 0x60:
 				ushort ad = pop();
-				ad <<= 8;
-				ad |= pop();
-				if (sp == 0xff)
+				ad |= cast(ushort) (pop() << 8);
+				if (stopOnEmptyStackRts && sp == 0xff)
 					return;
-				ad += 1;
 				pc = ad;
-				pc--;
 				break;
 			case 0x61: doIndirectX!adc(); break;
 			case 0x65: doAbsoluteZP!adc(); break;
@@ -642,7 +705,9 @@ class Emulator
 			case 0x8e: doAbsolute!"st(addr, x);"(); break;
 			case 0x90: doBranch!"!cflag"(); break;
 			case 0x91: doIndirectY!"st(addr, a);"(); break;
+			case 0x94: doAbsoluteZP!"st(addr, y);"(x); break;
 			case 0x95: doAbsoluteZP!"st(addr, a);"(x); break;
+			case 0x96: doAbsoluteZP!"st(addr, x);"(y); break;
 			case 0x98: setNZ(a = y); break;
 			case 0x99: doAbsolute!"st(addr, a);"(y); break;
 			case 0x9a: sp = x; break;
@@ -661,7 +726,9 @@ class Emulator
 			case 0xae: doAbsolute!ldx(); break;
 			case 0xb0: doBranch!"cflag"(); break;
 			case 0xb1: doIndirectY!lda(); break;
+			case 0xb4: doAbsoluteZP!ldy(x); break;
 			case 0xb5: doAbsoluteZP!lda(x); break;
+			case 0xb6: doAbsoluteZP!ldx(y); break;
 			case 0xb8: vflag = false; break;
 			case 0xb9: doAbsolute!lda(y); break;
 			case 0xba: setNZ(x = sp); break;
@@ -681,6 +748,7 @@ class Emulator
 			case 0xce: doAbsolute!dec(); break;
 			case 0xd0: doBranch!"!zflag"(); break;
 			case 0xd1: doIndirectY!cmp(); break;
+			case 0xd5: doAbsoluteZP!cmp(x); break;
 			case 0xd6: doAbsoluteZP!dec(x); break;
 			case 0xd8: dflag = false; break;
 			case 0xd9: doAbsolute!cmp(y); break;
@@ -720,4 +788,106 @@ class Emulator
 		pc = addr;
 		run();
 	}
+}
+
+private version(unittest) {
+
+	// TODO: build tests from source and extract the values from there
+	enum ushort entryPoint = 0x0400;
+	enum ushort testCaseVar = 0x0200;
+
+	enum long chunkCycles = 1_000_000;
+	enum long budgetCycles = 500_000_000;
+
+	bool isStuckSelfLoop(Emulator emu, ushort address)
+	{
+		const opcode = emu.ld(address);
+		if (opcode == 0x4c)                                  // jmp *
+			return emu.dpeek(address + 1) == address;
+		if (emu.ld(cast(ushort) (address + 1)) != 0xfe)      // not a branch to self
+			return false;
+		switch (opcode)
+		{
+		case 0x10: return !emu.nflag; // bpl
+		case 0x30: return emu.nflag;  // bmi
+		case 0x50: return !emu.vflag; // bvc
+		case 0x70: return emu.vflag;  // bvs
+		case 0x90: return !emu.cflag; // bcc
+		case 0xb0: return emu.cflag;  // bcs
+		case 0xd0: return !emu.zflag; // bne
+		case 0xf0: return emu.zflag;  // beq
+		case 0x80: return true;       // bra (65C02)
+		default:   return false;
+		}
+	}
+
+	ushort runToSelfLoop(Emulator emu, immutable(ubyte)[] image)
+	{
+		foreach (i, b; image)
+			emu.st(cast(ushort) i, b);
+		emu.sp = 0xff;
+		emu.pc = entryPoint;
+		emu.cycles = 0;
+		emu.stopOnEmptyStackRts = false;
+
+		bool started;
+		while (emu.cycles < budgetCycles)
+		{
+			emu.cycleLimit = emu.cycles + chunkCycles;
+			if (started)
+				emu.resume();
+			else
+			{
+				emu.run();
+				started = true;
+			}
+			foreach (ushort candidate; [cast(ushort) (emu.pc + 1), emu.pc])
+				if (emu.isStuckSelfLoop(candidate))
+					return candidate;
+		}
+		throw new Exception(format(
+			"did not settle within %d cycles (pc=$%04X, test_case=%d)",
+			budgetCycles, emu.pc, emu.ld(testCaseVar)));
+	}
+
+	bool check(Emulator emu, string what, immutable(ubyte)[] image,
+		ushort successAddress)
+	{
+		writef("%-34s ", what ~ ":");
+		stdout.flush();
+		try
+		{
+			const trap = runToSelfLoop(emu, image);
+			if (trap == successAddress)
+			{
+				writefln("PASS (success trap $%04X, %d cycles)", trap, emu.cycles);
+				return true;
+			}
+			writefln("FAIL -- stopped at $%04X, expected $%04X, test_case=%d",
+				trap, successAddress, emu.ld(testCaseVar));
+			writeln("       look the address up in the suite's .lst to identify the check");
+		}
+		catch (Exception e)
+			writefln("FAIL -- %s", e.msg);
+		return false;
+	}
+}
+
+unittest
+{
+	import std.file : read;
+
+	debug writeln("unittest emu");
+
+	bool ok = true;
+
+	// TODO: build tests from source instead of getting a magic address
+	// manually from listings.
+	ok &= check(new Emulator,
+		"6502 functional test",
+		cast(immutable(ubyte)[]) read("ext/6502_65C02_functional_tests/bin_files/6502_functional_test.bin"),
+		0x3469);
+
+	writeln(ok ? "all CPU tests passed" : "CPU TESTS FAILED");
+	assert(ok);
 }
