@@ -3,3 +3,5 @@
 /xebin-test-library
 /*.o
 /*.obj
+/libxebin.a
+/cputest/bin/
