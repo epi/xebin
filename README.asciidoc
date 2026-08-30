@@ -122,9 +122,105 @@ Disassembling binary file
 $ xebin d[isasm] [-o=fn] [input_files]
 ----------------------------
 
-Generated output is compatible with http://atariarea.krap.pl/x-asm/[xasm], except for the "unofficial" 6502 opcodes.
-Opcode names and argument syntax are taken from http://atari800.sourceforge.net/[Atari 800] emulator.
-No labels are created -- absolute addresses are printed for all variables, jumps, etc.
+Each block is disassembled as code, preceded by an +ORG+ directive with its load
+address. Blocks setting +RUNAD+ or +INITAD+ are emitted as +DTA A()+ with the address
+they point to.
+
+Labels are created for all addresses referenced by the disassembled code, including the
+run and init addresses. Addresses outside the loaded blocks are defined with +EQU+ at
+the beginning of the output, and a reference pointing into the middle of an instruction
+is printed as an offset from that instruction's label, e.g. +L2103+1+.
+
+Opcode names and argument syntax are taken from http://atari800.sourceforge.net/[Atari 800]
+emulator. Bytes that do not decode into an official 6502 instruction, as well as an
+instruction truncated by the end of a block, are emitted as +DTA+, so that the whole
+output can be fed back to http://atariarea.krap.pl/x-asm/[xasm] and assembled into
+the original file.
+
+Example output:
+
+-------------------------------------
+$ xebin d example.xex
+L0014	EQU $0014
+L02C8	EQU $02C8
+	ORG $2000
+L2000	LDA #$0F
+	STA L02C8
+L2005	LDA L0014
+	CMP L0014
+	BEQ L2005
+	JMP L2000
+	ORG $02E0
+	DTA A(L2000)
+-------------------------------------
+
+When more than one input file is given, disassembly of each of them is preceded by
+a comment with the file name.
+
+Running binary file
+~~~~~~~~~~~~~~~~~~~
+
+----------------------------
+$ xebin r[un] [--trace=what] [input_file]
+----------------------------
+
+The file is loaded into memory of a simple built-in emulator and run: each +INIT+
+routine is called as soon as the block setting it is loaded, and the +RUN+ routine
+is called once the whole file is loaded. Only the first input file is used.
+
+Only the CPU (NMOS 6502) and a few OS entry points are emulated. There is neither OS
+ROM nor any hardware, so this is useful for programs that compute and do character
+I/O, and not for anything that touches ANTIC, POKEY or GTIA.
+
++CIOV+ ($E456) is served by the host:
+
+- IOCB #0 is the console: get record reads a line from +stdin+, put record and put
+characters write to +stdout+, and +$9B+ is translated to a newline.
+- IOCB #1 to #7 support open, get, put and close on +D:+ files, which are mapped to
+files in the current directory (+>+ in an Atari file name becomes +/+).
+Other devices are rejected with error 130.
+
+Commands other than the above return error 132, just like CIO would.
+
+The emulator stops when the +RUN+ routine returns (or the last +INIT+ routine, if the
+file has no +RUN+ block), as well as when the program jumps through +DOSVEC+.
+A +BRK+ stops it with an error message pointing at the offending address.
+
+Nothing is traced by default. +--trace=what+ takes a comma-separated list of traces
+to enable, and may be given more than once, each occurrence adding to the set of
+enabled traces, so that +--trace=load,cio+ and +--trace=load --trace=cio+ mean the
+same. +--trace=all+ enables every trace. All traces go to +stderr+, so they can be
+told apart from the output of the program itself.
+
++load+ reports each block as it is loaded, along with the init and run addresses
+taken from the file:
+
+-------------------------------------
+$ xebin r --trace=load hello.xex
+Load 51 bytes at 2000-2032
+Load 2 bytes at 02E0-02E1
+Run at 2000
+Hello!
+-------------------------------------
+
++cio+ reports every CIO call, with the parameters taken from the IOCB:
+
+-------------------------------------
+$ xebin r --trace=cio hello.xex
+CIO #00 cmd=0b addr=0700 len=0007 aux1=00 aux2=00
+Hello!
+-------------------------------------
+
++cpu+ reports, for each executed instruction, the registers and flags as they were
+before it, its disassembly, and the memory reads and writes it makes:
+
+-------------------------------------
+$ xebin r --trace=cpu hello.xex
+A=00 X=00 Y=00 S=FD P=--*-----  2000  A2 00      LDX #$00
+A=00 X=00 Y=00 S=FD P=--*---Z-  2002  BD 2C 20   LDA $202C,X    R 202C 48
+A=48 X=00 Y=00 S=FD P=--*-----  2005  F0 06      BEQ $200D
+A=48 X=00 Y=00 S=FD P=--*-----  2007  9D 00 07   STA $0700,X    W 0700 48
+-------------------------------------
 
 Compressing binary file
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -168,7 +264,18 @@ History
 
 unreleased::
 
+Added +run+ command, which loads and executes a binary file in a built-in emulator,
+with OS calls served by the host.
+The emulator implements all 65x02 variants (NMOS 6502, 65C02, Rockwell R65C02 and W65C02S)
+with cycle-exact timing; the +run+ command uses the NMOS 6502.
+Added +--trace+ option, which reports what the +run+ command loads, executes
+and asks CIO for.
+Disassembler now creates labels for addresses referenced inside the disassembled code.
+Disassembler output is now directly assemblable with xasm.
 +INIT+ and +RUN+ are now correctly detected for every block that overwrites them.
+Fixed reading from non-seekable input files, such as pipes.
+Fixed crash when packing blocks shorter than two bytes.
+Build process switched to dub, with xasm used as a separate dependency package.
 
 xebin 1.1.0 (2011-04-20)::
 
