@@ -199,7 +199,7 @@ Item[] toItems(BinaryBlock[] blocks)
 		const src = block.data;
 		const srclen = cast(uint) src.length;
 
-		auto dict = iota(srclen - 2)
+		auto dict = iota(srclen > 2 ? srclen - 2 : 0)
 			.array
 			.sort!((i, j) => src[i .. i + 2] < src[j .. j + 2]);
 
@@ -596,6 +596,48 @@ unittest
 	assert(blks1o[0].addr == 0x2000 && blks1o[0].data.startsWith(cast(ubyte[]) x"80 e0 00807f80 0103 0100"));
 	auto blks1u = unpackBlock(blks1o[0]);
 	assert(blks1i == blks1u);
+}
+
+unittest
+{
+	debug writeln("unittest packBlock short blocks");
+
+	// Nothing matches inside a block of 1 or 2 bytes
+	foreach (len; 1 .. 4)
+	{
+		auto blksi = [ BinaryBlock(0x8000, (cast(ubyte[]) x"abcdef".dup)[0 .. len]) ];
+		auto blkso = packBlock(blksi, false, 0x2000);
+		assert(unpackBlock(blkso[0]) == blksi);
+	}
+
+	// Two 1-byte blocks in a single packed segment
+	auto blks2i = [ BinaryBlock(0x2137, cast(ubyte[]) x"42".dup),
+		BinaryBlock(0x1337, cast(ubyte[]) x"69".dup) ];
+	auto blks2o = packBlock(blks2i, false, 0x2000);
+	assert(blks2o[0].addr == 0x2000
+		&& blks2o[0].data.startsWith(cast(ubyte[]) x"80 e0 00b72042 00b71269 0100"));
+	assert(unpackBlock(blks2o[0]) == blks2i);
+}
+
+unittest
+{
+	debug writeln("unittest flashPack short blocks with run/init");
+
+	// 1-byte block should pass unchanged
+	auto blksi = [ BinaryBlock(0x2137, cast(ubyte[]) x"42".dup),
+		BinaryBlock(0x1337, cast(ubyte[]) x"69".dup),
+		makeRunBlock(0x1337),
+		makeInitBlock(0x2137) ];
+	auto packed = flashPack(blksi);
+	assert(flashUnpack(packed) == blksi);
+
+	// RUN first, so the first segment is empty and must not be packed at all,
+	// and data last, so the tail after the vectors still is.
+	auto blksj = [ makeRunBlock(0x1337),
+		BinaryBlock(0x2137, cast(ubyte[]) x"42".dup),
+		makeInitBlock(0x2137),
+		BinaryBlock(0x1337, cast(ubyte[]) x"69".dup) ];
+	assert(flashUnpack(flashPack(blksj)) == blksj);
 }
 
 unittest
