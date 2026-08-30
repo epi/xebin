@@ -163,9 +163,9 @@ struct Disassembler
 			}
 			foreach (block; blocks)
 			{
-				if (block.isRun)
+				if (block.contains(runAd))
 					put(block.runAddress);
-				if (block.isInit)
+				if (block.contains(initAd))
 					put(block.initAddress);
 				foreach (addr, atype, const bytes; instructionSplitter(block))
 				{
@@ -459,7 +459,7 @@ auto instructionSplitter(BinaryBlock block)
 			const(ubyte)[] data = block.data;
 			while (data.length)
 			{
-				if ((addr == 0x2e0 || addr == 0x2e2) && data.length >= 2)
+				if ((addr == runAd || addr == initAd) && data.length >= 2)
 				{
 					if (auto res = dg(addr, AddrType.dta_a, data[0 .. 2]))
 						return res;

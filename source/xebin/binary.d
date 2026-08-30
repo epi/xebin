@@ -3,7 +3,7 @@
 	Structs for handling Atari XL/XE binary loadable files.
 
 	Author: Adrian Matoga epi@atari8.info
-	
+
 	Poetic License:
 
 	This work 'as-is' we provide.
@@ -21,10 +21,17 @@
 
 module xebin.binary;
 
+import std.array : join;
 import std.conv;
 import std.exception;
 import std.stdio;
 import std.string;
+
+/// RUNAD. DOS jumps through it once the whole file has been loaded.
+enum ushort runAd = 0x02E0;
+
+/// INITAD. DOS calls through it as soon as the block that wrote it is loaded.
+enum ushort initAd = 0x02E2;
 
 ushort toUshort(ubyte[] tab)
 {
@@ -41,12 +48,12 @@ ubyte[] toBytes(ushort sh)
 
 BinaryBlock makeInitBlock(ushort addr)
 {
-	return BinaryBlock(0x2e2, toBytes(addr));
+	return BinaryBlock(initAd, toBytes(addr));
 }
 
 BinaryBlock makeRunBlock(ushort addr)
 {
-	return BinaryBlock(0x2e0, toBytes(addr));
+	return BinaryBlock(runAd, toBytes(addr));
 }
 
 struct BinaryBlock
@@ -64,14 +71,27 @@ struct BinaryBlock
 		return data.length > 0 && addr + data.length <= 0xffff;
 	}
 
+	/// True if any byte of the two-byte vector at `vector` falls inside the block.
+	bool touches(ushort vector)
+	{
+		return data.length > 0
+			&& addr <= vector + 1 && addr + data.length > vector;
+	}
+
+	/// True if the block supplies both bytes of the vector at `vector`.
+	bool contains(ushort vector)
+	{
+		return addr <= vector && addr + data.length >= vector + 2;
+	}
+
 	@property bool isRun()
 	{
-		return addr == 0x2E0 && (data.length == 2 || data.length == 4);
+		return touches(runAd);
 	}
-	
+
 	@property bool isInit()
 	{
-		return (addr == 0x2E2 && data.length == 2) || (addr == 0x2E0 && data.length == 4);
+		return touches(initAd);
 	}
 
 	@property size_t length()
@@ -84,29 +104,45 @@ struct BinaryBlock
 		return BinaryBlock(addr, data.dup);
 	}
 
+	ushort vectorAddress(ushort vector)
+	{
+		if (!contains(vector))
+			throw new Exception(format("Block does not contain the whole vector at %04X", vector));
+		return toUshort(data[vector - addr .. vector - addr + 2]);
+	}
+
 	@property ushort initAddress()
 	{
-		if (!isInit)
-			throw new Exception("Not an init block");
-		return toUshort(data[0x2E2 - addr .. 0x2E2 - addr + 2]);
+		return vectorAddress(initAd);
 	}
 
 	@property ushort runAddress()
 	{
-		if (!isRun)
-			throw new Exception("Not a run block");
-		return toUshort(data[0x2E0 - addr .. 0x2E0 - addr + 2]);
+		return vectorAddress(runAd);
+	}
+
+	private string vectorString(ushort vector)
+	{
+		string hexByte(uint a)
+		{
+			return a >= addr && a < addr + data.length
+				? format("%02X", data[a - addr]) : "??";
+		}
+		return "$" ~ hexByte(vector + 1) ~ hexByte(vector);
 	}
 
 	string toString()
 	{
-		if (isInit || isRun)
-			return 
-				(isInit ? format("Init %04X" ~ (isRun ? ", " : ""), initAddress) : "")
-				~ (isRun ? format("Run %04X", runAddress) : "");
-		return format("%04X-%04X (%04X)%s", addr, addr + data.length - 1, data.length, isValid ? "" : " (Invalid!)");
+		auto s = format("%04X-%04X (%04X)%s", addr, addr + data.length - 1,
+			data.length, isValid ? "" : " (Invalid!)");
+		string[] notes;
+		if (isInit)
+			notes ~= "INIT " ~ vectorString(initAd);
+		if (isRun)
+			notes ~= "RUN " ~ vectorString(runAd);
+		return notes.length ? s ~ "  ; " ~ notes.join(", ") : s;
 	}
-	
+
 	const bool opEquals(ref const(BinaryBlock) b)
 	{
 		return addr == b.addr && data == b.data;
@@ -132,20 +168,44 @@ struct BinaryBlock
 		auto run = BinaryBlock(0x2E0, [ 0x34, 0x12 ]);
 		assert(run.isRun);
 		assert(!run.isInit);
+		assert(run.runAddress == 0x1234);
 		assert(run.toBytes(true) == [ 0xFF, 0xFF, 0xE0, 0x02, 0xE1, 0x02, 0x34, 0x12 ]);
-		assert(run.toString() == "Run 1234");
-		
+		assert(run.toString() == "02E0-02E1 (0002)  ; RUN $1234");
+
 		auto ini = BinaryBlock(0x2E2, [ 0xCD, 0xAB ]);
 		assert(ini.isInit);
 		assert(!ini.isRun);
+		assert(ini.initAddress == 0xABCD);
 		assert(ini.toBytes(false) == [ 0xE2, 0x02, 0xE3, 0x02, 0xCD, 0xAB ]);
-		assert(ini.toString() == "Init ABCD");
-		
+		assert(ini.toString() == "02E2-02E3 (0002)  ; INIT $ABCD");
+
 		auto runini = BinaryBlock(0x2E0, [ 0xEF, 0x34, 0x56, 0x78 ]);
 		assert(runini.isInit);
 		assert(runini.isRun);
 		assert(runini.toBytes(true) == [ 0xFF, 0xFF, 0xE0, 0x02, 0xE3, 0x02, 0xEF, 0x34, 0x56, 0x78 ]);
-		assert(runini.toString() == "Init 7856, Run 34EF");
+		assert(runini.toString() == "02E0-02E3 (0004)  ; INIT $7856, RUN $34EF");
+
+		auto spanning = BinaryBlock(0x2DE, [ 0, 0, 0x00, 0x20, 0x00, 0x40, 0 ]);
+		assert(spanning.isRun);
+		assert(spanning.isInit);
+		assert(spanning.runAddress == 0x2000);
+		assert(spanning.initAddress == 0x4000);
+		assert(spanning.toString() == "02DE-02E4 (0007)  ; INIT $4000, RUN $2000");
+
+		auto partial = BinaryBlock(0x2E1, [ 0x99 ]);
+		assert(partial.isRun);
+		assert(!partial.isInit);
+		assert(!partial.contains(runAd));
+		assert(partial.toString() == "02E1-02E1 (0001)  ; RUN $99??");
+
+		auto plain = BinaryBlock(0x2000, [ 0x60, 0x60 ]);
+		assert(!plain.isRun);
+		assert(!plain.isInit);
+		assert(plain.toString() == "2000-2001 (0002)");
+
+		assert(!BinaryBlock(0x2DE, [ 0, 0 ]).isRun);
+		assert(!BinaryBlock(0x2E2, [ 0, 0 ]).isRun);
+		assert(!BinaryBlock(0x2E4, [ 0, 0 ]).isInit);
 	}
 }
 
@@ -185,7 +245,7 @@ struct BinaryFileReader
 				break;
 			}
 		}
-		
+
 		auto result = BinaryBlock(start);
 		enforce(end >= start, "End address lesser than start address");
 		auto l = end - start + 1;
@@ -237,7 +297,7 @@ struct BinaryFileWriter
 		file_.rawWrite(block.addrBytes);
 		file_.rawWrite(block.data);
 	}
-	
+
 	void writeBlock(ushort addr, ubyte[] data)
 	{
 		writeBlock(BinaryBlock(addr, data));
