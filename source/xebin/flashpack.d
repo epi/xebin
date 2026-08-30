@@ -132,7 +132,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 
 	auto runAddr = toUshort(blocks[1].data[0 .. 2]);
 	auto blk = blocks[0];
-	if (blk.addr == runAddr)
+	if (blk.addr == runAddr && blk.length > DepackerLength.FLASHPACK_10)
 	{
 		auto depacker = assembleDepacker(depackerSrc10, [
 			"ADDRESS": cast(int) (blk.addr + DepackerLength.FLASHPACK_10),
@@ -586,6 +586,39 @@ unittest
 	auto depacker = assembleDepacker(depackerSrc10, [
 		"ADDRESS": 0x805e, "CODEADDR": 0x8000 ]);
 	assert(depacker.object().length == DepackerLength.FLASHPACK_10);
+}
+
+unittest
+{
+	debug writeln("unittest detectCompressionMethod short blocks");
+
+	// A block shorter than the FlashPack 1.0 depacker cannot be packed data,
+	// even if its address happens to match the run vector.
+	foreach (len; 1 .. cast(size_t) DepackerLength.FLASHPACK_10 + 1)
+	{
+		auto blocks = [ BinaryBlock(0x1337, new ubyte[len]), makeRunBlock(0x1337) ];
+		assert(detectCompressionMethod(blocks) == CompressionMethod.NONE);
+	}
+
+	// Same for the FlashPack 2.1 depackers, which sit at the end of the block.
+	foreach (len; 1 .. cast(size_t) DepackerLength.FLASHPACK_21_OS_DISABLED + 1)
+	{
+		auto blocks = [ BinaryBlock(0x1337, new ubyte[len]), makeRunBlock(0x1337) ];
+		assert(detectCompressionMethod(blocks) == CompressionMethod.NONE);
+	}
+
+	// A real FlashPack 1.0 block is still detected: depacker first, then at
+	// least one byte of packed data.
+	enum addr = 0x1337;
+	auto depacker = assembleDepacker(depackerSrc10, [
+		"ADDRESS": cast(int) (addr + DepackerLength.FLASHPACK_10),
+		"CODEADDR": cast(int) addr ]);
+	auto fp10 = [ BinaryBlock(addr, depacker.object().dup ~ cast(ubyte) 0),
+		makeRunBlock(addr) ];
+	assert(detectCompressionMethod(fp10) == CompressionMethod.FLASHPACK_10);
+	// ...but the bare depacker, with no packed data behind it, is not.
+	fp10[0].data = fp10[0].data[0 .. $ - 1];
+	assert(detectCompressionMethod(fp10) == CompressionMethod.NONE);
 }
 
 unittest
