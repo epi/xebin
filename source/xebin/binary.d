@@ -33,18 +33,9 @@ enum ushort runAd = 0x02E0;
 /// INITAD. DOS calls through it as soon as the block that wrote it is loaded.
 enum ushort initAd = 0x02E2;
 
-ushort toUshort(ubyte[] tab)
-{
-	return cast(ushort) (tab[0] | (tab[1] << 8));
-}
+ushort toUshort(in ubyte[] tab) pure nothrow @safe => cast(ushort) (tab[0] | (tab[1] << 8));
 
-ubyte[] toBytes(ushort sh)
-{
-	ubyte[] tab = new ubyte[2];
-	tab[0] = sh & 0xFF;
-	tab[1] = sh >>> 8;
-	return tab;
-}
+ubyte[] toBytes(ushort sh) pure nothrow @safe => [ cast(ubyte) (sh & 0xFF), sh >>> 8 ];
 
 BinaryBlock makeInitBlock(ushort addr)
 {
@@ -61,67 +52,67 @@ struct BinaryBlock
 	ushort addr;
 	ubyte[] data;
 
-	@property ushort end() const pure nothrow @safe
+	ushort end() const
 	{
 		return cast(ushort) (addr + data.length - 1);
 	}
 
-	@property bool isValid()
+	bool isValid() const
 	{
 		return data.length > 0 && addr + data.length <= 0xffff;
 	}
 
 	/// True if any byte of the two-byte vector at `vector` falls inside the block.
-	bool touches(ushort vector)
+	bool touches(ushort vector) const
 	{
 		return data.length > 0
 			&& addr <= vector + 1 && addr + data.length > vector;
 	}
 
 	/// True if the block supplies both bytes of the vector at `vector`.
-	bool contains(ushort vector)
+	bool contains(ushort vector) const
 	{
 		return addr <= vector && addr + data.length >= vector + 2;
 	}
 
-	@property bool isRun()
+	bool isRun() const
 	{
 		return touches(runAd);
 	}
 
-	@property bool isInit()
+	bool isInit() const
 	{
 		return touches(initAd);
 	}
 
-	@property size_t length()
+	size_t length() const
 	{
 		return data.length;
 	}
 
-	@property BinaryBlock dup()
+	BinaryBlock dup() const
 	{
 		return BinaryBlock(addr, data.dup);
 	}
 
-	ushort vectorAddress(ushort vector)
+	ushort vectorAddress(ushort vector) const
 	{
 		if (!contains(vector))
 			throw new Exception(format("Block does not contain the whole vector at %04X", vector));
 		return toUshort(data[vector - addr .. vector - addr + 2]);
 	}
 
-	@property ushort initAddress()
+	ushort initAddress() const
 	{
 		return vectorAddress(initAd);
 	}
 
-	@property ushort runAddress()
+	ushort runAddress() const
 	{
 		return vectorAddress(runAd);
 	}
 
-	private string vectorString(ushort vector)
+	private string vectorString(ushort vector) const
 	{
 		string hexByte(uint a)
 		{
@@ -131,7 +122,7 @@ struct BinaryBlock
 		return "$" ~ hexByte(vector + 1) ~ hexByte(vector);
 	}
 
-	string toString()
+	string toString() const
 	{
 		auto s = format("%04X-%04X (%04X)%s", addr, addr + data.length - 1,
 			data.length, isValid ? "" : " (Invalid!)");
@@ -143,19 +134,19 @@ struct BinaryBlock
 		return notes.length ? s ~ "  ; " ~ notes.join(", ") : s;
 	}
 
-	const bool opEquals(ref const(BinaryBlock) b)
+	bool opEquals(ref const(BinaryBlock) b) const
 	{
 		return addr == b.addr && data == b.data;
 	}
 
-	ubyte[] addrBytes(bool header = false)
+	ubyte[] addrBytes(bool header = false) const
 	{
 		if (!isValid)
 			throw new Exception("Invalid block");
 		return cast(ubyte[])(header ? [ 0xFF, 0xFF ] : []) ~ .toBytes(addr) ~ .toBytes(cast(ushort) (addr + data.length - 1));
 	}
 
-	ubyte[] toBytes(bool header = false)
+	ubyte[] toBytes(bool header = false) const
 	{
 		if (!isValid)
 			throw new Exception("Invalid block");
