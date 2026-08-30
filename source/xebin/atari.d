@@ -94,6 +94,7 @@ class AtariHost(E)
 		for (uint ad = 0x0340 + 0x10; ad < 0x340 + 0x80; ++ad)
 			emu.ram[ad] = 255;
 
+		bool run = false;
 		foreach (block; blocks)
 		{
 			if (traceLoad)
@@ -104,13 +105,16 @@ class AtariHost(E)
 			emu.ram[block.addr .. block.addr + block.length] = block.data[];
 			if (block.isInit)
 			{
+				const initaddr = emu.dpeek(initAd);
 				if (traceLoad)
-					writefln("Init at %04x", block.initAddress);
-				emu.jsr(block.initAddress);
+					writefln("Init at %04X", initaddr);
+				emu.jsr(initaddr);
 			}
+			run |= block.isRun;
 		}
-		if (ushort runaddr = emu.dpeek(0x2e0))
+		if (run)
 		{
+			const runaddr = emu.dpeek(runAd);
 			if (traceLoad)
 				writefln("Run at %04X", runaddr);
 			emu.jsr(runaddr);

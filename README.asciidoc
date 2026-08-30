@@ -69,7 +69,7 @@ Example output:
 D:\proj\tipview>xebin l tv10.xex
   0. 8C00-903C (043D)
   1. 91DD-A3B7 (11DB)
-  2. Run 91FD
+  2. 02E0-02E1 (0002)  ; RUN $91FD
 -------------------------------------
 
 With +-v+ contents of packed blocks are shown, e.g.:
@@ -80,8 +80,8 @@ D:\proj\fail\vrgb\xebin l vrgb10.xex
       0. 3000-39A0 (09A1)
       1. 3C21-3C48 (0028)
       2. 3CC1-3CF1 (0031)
-      3. Run 3000
-  1. Init 4000
+      3. 02E0-02E1 (0002)  ; RUN $3000
+  1. 02E2-02E3 (0002)  ; INIT $4000
 -------------------------------------
 
 Merging two or more files
@@ -94,7 +94,7 @@ $ xebin m[erge] [-o=fn] [-v] [input_files]
 Blocks from all files are concatenated in the order they appear in the list
 of input files.
 
-Reduntant +FFFF+ headers are dropped. 
+Reduntant +FFFF+ headers are dropped.
 
 +-v+ displays layout of resulting file.
 
@@ -134,8 +134,9 @@ $ xebin p[ack] [-a=ad] [-s] [-o=fn] [-v] [input_files]
 ----------------------------
 
 The command compresses a binary file using FlashPack algorithm. For each group of
-blocks between Init and Run blocks, it creates a single packed block with its own
-depacker. Init and Run blocks are copied unchanged.
+blocks between blocks that write +RUNAD+ or +INITAD+, it creates a single packed
+block with its own depacker. Blocks that write those vectors are copied unchanged,
+so that the loader still runs them at the point the original file expected.
 
 +xebin+ tries to determine address of packed block so it won't collide with
 unpacked blocks. You can override its guess, or just give it a hand when it fails
@@ -164,6 +165,10 @@ $ xebin u[npack] [-o=fn] [-v] [input_files]
 
 History
 -------
+
+unreleased::
+
++INIT+ and +RUN+ are now correctly detected for every block that overwrites them.
 
 xebin 1.1.0 (2011-04-20)::
 
