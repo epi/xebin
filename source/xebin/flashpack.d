@@ -86,14 +86,14 @@ BinaryBlock[] flashPack(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	{
 		if (blk.isRun || blk.isInit)
 		{
-			if (j - i > 0)
+			if (i > j)
 				result ~= packBlock(blocks[j .. i], disableOs, addr, endaddr);
 			result ~= blk;
 			j = i + 1;
 		}
 	}
 	// blocks at the end without init / run
-	if (j - blocks.length > 0)
+	if (j < blocks.length)
 		result ~= packBlock(blocks[j .. blocks.length], disableOs, addr, endaddr);
 
 	return result;
@@ -152,7 +152,7 @@ CompressionMethod detectCompressionMethod(BinaryBlock[] blocks)
 			if (depacker.object()[] == blk.data[blk.length - DepackerLength.FLASHPACK_21 .. $])
 				return CompressionMethod.FLASHPACK_21;
 		}
-		
+
 		if (blk.length > DepackerLength.FLASHPACK_21_OS_DISABLED)
 		{
 			auto depacker = assembleDepacker(depackerSrc21, [
@@ -289,7 +289,7 @@ BinaryBlock[] packBlock(BinaryBlock[] blocks, bool disableOs = false, ushort add
 	// pack
 	auto result = BinaryBlock(0, blocks.toItems().toBytes());
 	size_t packedLength = result.length + (disableOs ? DepackerLength.FLASHPACK_21_OS_DISABLED : DepackerLength.FLASHPACK_21);
-	
+
 	// auto set addr
 	if (addr == 0xffff)
 	{
@@ -550,7 +550,7 @@ setad
 	stx $FE
 	sta $FF
 	bcc do
-		
+
 get	lda ADDRESS
 	inc get+1
 	sne:inc get+2
@@ -697,4 +697,3 @@ unittest
 	auto unpacked = flashUnpack(packed);
 	assert(unpacked == [ bb ]);
 }
-
