@@ -99,7 +99,7 @@ class AtariHost(E)
 		{
 			if (traceLoad)
 			{
-				writefln("Load %d bytes at %04X-%04X", block.length,
+				stderr.writefln("Load %d bytes at %04X-%04X", block.length,
 					block.addr, block.end);
 			}
 			emu.ram[block.addr .. block.addr + block.length] = block.data[];
@@ -107,7 +107,7 @@ class AtariHost(E)
 			{
 				const initaddr = emu.dpeek(initAd);
 				if (traceLoad)
-					writefln("Init at %04X", initaddr);
+					stderr.writefln("Init at %04X", initaddr);
 				emu.jsr(initaddr);
 			}
 			run |= block.isRun;
@@ -116,7 +116,7 @@ class AtariHost(E)
 		{
 			const runaddr = emu.dpeek(runAd);
 			if (traceLoad)
-				writefln("Run at %04X", runaddr);
+				stderr.writefln("Run at %04X", runaddr);
 			emu.jsr(runaddr);
 		}
 	}
@@ -124,7 +124,7 @@ class AtariHost(E)
 	void consoleIO(uint cmd, uint addr, uint len)
 	{
 		if (ioTrace)
-			writeln();
+			stderr.writeln();
 		switch (cmd)
 		{
 		case 5:
@@ -206,7 +206,7 @@ class AtariHost(E)
 					name ~= ch;
 				}
 				if (ioTrace)
-					writefln(`OPEN #%d,%d,%d,"%s"`, iocb + 1, aux1, aux2, name);
+					stderr.writefln(`   OPEN #%d,%d,%d,"%s"`, iocb + 1, aux1, aux2, name);
 				if (name[0] != 'D')
 				{
 					emu.setNZ(emu.y = 130);
@@ -256,7 +256,7 @@ class AtariHost(E)
 				break;
 			case 12:
 				if (ioTrace)
-					writefln("CLOSE #%d", iocb + 1);
+					stderr.writefln("   CLOSE #%d", iocb + 1);
 				iocbs[iocb].close();
 				emu.ram[0x350 + iocb * 16] = 255;
 				break;
