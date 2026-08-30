@@ -25,6 +25,8 @@ import std.string;
 import std.ascii;
 import std.conv;
 import std.getopt;
+import std.algorithm : splitter;
+import std.traits : EnumMembers;
 
 import xebin.binary;
 import xebin.flashpack;
@@ -211,15 +213,15 @@ private void runEmulator(E)(BinaryBlock[] blocks)
 {
 	auto emu = new E();
 	auto atari = atariHost(emu);
-	atari.ioTrace = ioTrace;
-	atari.traceLoad = cpuTrace;
+	atari.ioTrace = tracing(Trace.cio);
+	atari.traceLoad = tracing(Trace.load);
 	atari.loadAndRun(blocks);
 }
 
 void run(string[] args)
 {
 	auto blocks = BinaryFileReader(InputFiles(args).front).readFile();
-	if (cpuTrace)
+	if (tracing(Trace.cpu))
 		runEmulator!(Emulator!(CpuVariant.mos_6502, CpuTracer))(blocks);
 	else
 		runEmulator!(Emulator!())(blocks);
@@ -240,7 +242,7 @@ void printHelp(string[] args)
 		" i[nsert]  [-n=pos] [-a=ad] [-o=fn] [-v]  insert block into file\n" ~
 		" o[ptimize] [-o=fn] [-i]               optimize file\n +/
 		" d[isasm]  [-o=fn]                     disassemble blocks\n" ~
-		" r[un]                                 run in a simple emulator\n" ~
+		" r[un]     [--trace=what]              run in a simple emulator\n" ~
 		" p[ack]    [-a=ad] [-s] [-o=fn] [-v]   pack using FlashPack algorithm\n" ~
 		" u[npack]  [-o=fn] [-v]                unpack FlashPack'd file\n" ~
 		" h[elp]                                print this message\n" ~
@@ -256,6 +258,9 @@ void printHelp(string[] args)
 //		" -n|--position=pos        set block position for extract, delete, insert\n" ~
 //		"                          (indexed from 0)\n" ~
 		" -s|--disable-os          make depacker running with OS ROM disabled\n" ~
+		" --trace=what[,what...]   report what the run command does; available\n" ~
+		"                          traces are load, cpu and cio, or all for\n" ~
+		"                          all of them\n" ~
 		" -v|--verbose             emit some junk to stdout (requires output file\n" ~
 		"                          to be specified)\n" ~
 		"\nIf input file is not specified, stdin is used as input.\n" ~
@@ -302,8 +307,52 @@ int parseInt(string n)
 	return minus ? -result : result;
 }
 
-bool cpuTrace;
-bool ioTrace;
+/// Trace channels
+enum Trace : uint
+{
+	load = 1, /// blocks as they are loaded, and the init and run addresses taken
+	cpu  = 2, /// registers, disassembly and memory accesses of every instruction
+	cio  = 4, /// CIO calls made by the running program
+}
+
+uint traces;
+
+bool tracing(Trace t) { return (traces & t) != 0; }
+
+/// Names of all traces, for error messages.
+string traceNames()
+{
+	string result;
+	foreach (t; EnumMembers!Trace)
+		result ~= (result.length ? ", " : "") ~ t.to!string;
+	return result;
+}
+
+/// Handles one --trace option, adding its comma-separated names to `traces`.
+void parseTraces(string option, string value)
+{
+	foreach (name; value.splitter(','))
+	{
+		if (name == "all")
+		{
+			foreach (t; EnumMembers!Trace)
+				traces |= t;
+			continue;
+		}
+		bool known;
+		foreach (t; EnumMembers!Trace)
+		{
+			if (name == t.to!string)
+			{
+				traces |= t;
+				known = true;
+			}
+		}
+		if (!known)
+			throw new Exception("Unknown trace `" ~ name
+				~ "'. Available traces: " ~ traceNames() ~ ", all");
+	}
+}
 
 int main(string[] args)
 {
@@ -318,8 +367,7 @@ int main(string[] args)
 				config.caseSensitive,
 				config.noBundling,
 				"s|disable-os", &disableOs,
-				"trace-cpu", &cpuTrace,
-				"trace-cio", &ioTrace,
+				"trace", &parseTraces,
 				"a|address", &strAddr,
 				"n|position", &position,
 				"r|raw", &removeHeader,
