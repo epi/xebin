@@ -65,7 +65,7 @@ private Assembler assembleDepacker(string source, int[string] definitions)
 {
 	auto assembler = new Assembler(
 		delegate immutable(ubyte)[](string path) { return source.representation; },
-		delegate immutable(ubyte)[](string path, long offset, long length) { return null; },
+		delegate immutable(ubyte)[](string path, int offset, int length) { return null; },
 		delegate void(in Diagnostic d) {
 			if (d.severity == Severity.error)
 				throw new FlashPackException(
