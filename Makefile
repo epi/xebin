@@ -1,6 +1,5 @@
 VERSION = 1.1.0
-SOURCES = $(addprefix source/xebin/,flashpack.d binary.d disasm.d vm.d xasm.d) \
-	source/app.d
+SOURCES = $(wildcard source/xebin/*.d) source/app.d
 ASCIIDOC = asciidoc -o $@ -a doctime
 ASCIIDOC_POSTPROCESS =
 ZIP = 7z a -mx=9 -tzip $@

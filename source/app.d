@@ -44,6 +44,29 @@ bool verbose;
 string outputFile;
 bool disableOs;
 bool removeHeader;
+Cpu cpu = Cpu.mos_6502;
+
+void parseCpu(string option, string value)
+{
+	switch (value.toLower())
+	{
+	case "6502":
+		cpu = Cpu.mos_6502;
+		break;
+	case "65c02":
+		cpu = Cpu.wdc_65c02;
+		break;
+	case "r65c02":
+		cpu = Cpu.rockwell_r65c02;
+		break;
+	case "w65c02s":
+		cpu = Cpu.wdc_w65c02s;
+		break;
+	default:
+		throw new Exception("Unknown CPU `" ~ value
+			~ "'. Available CPUs: 6502, 65c02, r65c02, w65c02s");
+	}
+}
 
 immutable VERSION_STRING = "1.1.0";
 
@@ -205,7 +228,7 @@ void disassembly(string[] args)
 		if (args.length > 3)
 			of.writeln("; ", file.name, ":");
 
-		foreach (line; BinaryFileReader(file).readFile().disassemble)
+		foreach (line; BinaryFileReader(file).readFile().disassemble(cpu))
 		{
 			of.writeln(line);
 		}
@@ -225,7 +248,7 @@ void run(string[] args)
 {
 	auto blocks = BinaryFileReader(InputFiles(args).front).readFile();
 	if (tracing(Trace.cpu))
-		runEmulator!(Emulator!(CpuVariant.mos_6502, CpuTracer))(blocks);
+		runEmulator!(Emulator!(Cpu.mos_6502, CpuTracer))(blocks);
 	else
 		runEmulator!(Emulator!())(blocks);
 }
@@ -244,7 +267,7 @@ void printHelp(string[] args)
 		" r[emove]  [-n=pos] [-o=fn] [-v]       remove block from file\n" ~
 		" i[nsert]  [-n=pos] [-a=ad] [-o=fn] [-v]  insert block into file\n" ~
 		" o[ptimize] [-o=fn] [-i]               optimize file\n +/
-		" d[isasm]  [-o=fn]                     disassemble blocks\n" ~
+		" d[isasm]  [-c=cpu] [-o=fn]            disassemble blocks\n" ~
 		" r[un]     [--trace=what]              run in a simple emulator\n" ~
 		" p[ack]    [-a=ad] [-s] [-o=fn] [-v]   pack using FlashPack algorithm\n" ~
 		" u[npack]  [-o=fn] [-v]                unpack FlashPack'd file\n" ~
@@ -256,6 +279,8 @@ void printHelp(string[] args)
 		"                          (use '-' for end address)\n" ~
 		" -n|--position=pos        which block to extract (indexed from 0)\n" ~
 		" -r|--raw                 remove header from extracted block\n" ~
+		" -c|--cpu=type            disassemble for the given CPU: 6502 (default),\n" ~
+		"                          65c02, r65c02 or w65c02s\n" ~
 //		" -i|--ignore-order        do not preserve order of block if it makes\n" ~
 //		"                          optimized file shorter\n" ~
 //		" -n|--position=pos        set block position for extract, delete, insert\n" ~
@@ -370,6 +395,7 @@ int main(string[] args)
 				config.caseSensitive,
 				config.noBundling,
 				"s|disable-os", &disableOs,
+				"c|cpu", &parseCpu,
 				"trace", &parseTraces,
 				"a|address", &strAddr,
 				"n|position", &position,

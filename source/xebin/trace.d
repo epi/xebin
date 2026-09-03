@@ -56,7 +56,7 @@ struct CpuTracer
 			emu.zflag ? "Z" : "-",
 			emu.cflag ? "C" : "-");
 		ushort addr = emu.pc;
-		line.put(disassembleOne(emu.ram, addr));
+		line.put(disassembleOne(emu.ram, addr, E.cpu));
 	}
 
 	/// Opcode and operand fetches: shown as disassembly, don't trace.
@@ -103,7 +103,7 @@ unittest
 
 	debug writeln("unittest CpuTracer");
 
-	auto emu = new Emulator!(CpuVariant.mos_6502, CpuTracer)();
+	auto emu = new Emulator!(Cpu.mos_6502, CpuTracer)();
 	string[] lines;
 	emu.observer.sink = delegate void(const(char)[] l) { lines ~= l.idup; };
 
@@ -122,4 +122,27 @@ unittest
 	// the store is reported as an access on the instruction that made it
 	assert(lines[1].canFind("W 0080 42"));
 	assert(!lines[0].canFind("W "), "no access on an immediate load");
+}
+
+unittest
+{
+	import xebin.emu;
+
+	debug writeln("unittest CpuTracer 65C02");
+
+	auto emu = new Emulator!(Cpu.wdc_65c02, CpuTracer)();
+	string[] lines;
+	emu.observer.sink = delegate void(const(char)[] l) { lines ~= l.idup; };
+
+	// stz $80
+	emu.ram[0x2000 .. 0x2002] = [ubyte(0x64), 0x80];
+	emu.ram[0x0080] = 0xff;
+	emu.pc = 0x2000;
+	emu.instructionLimit = 1;
+	emu.run();
+
+	assert(lines.length == 1);
+	// the disassembly follows the emulated variant's instruction set
+	assert(lines[0].canFind("STZ $80"));
+	assert(lines[0].canFind("W 0080 00"));
 }
