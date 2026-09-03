@@ -268,7 +268,7 @@ struct Result
 	string[] unittests;
 }
 
-string emitUnittest(CpuVariant v, ref const TestCase t)
+string emitUnittest(Cpu v, ref const TestCase t)
 {
 	ubyte[ushort] before;
 	foreach (c; t.initialRam)
@@ -277,7 +277,7 @@ string emitUnittest(CpuVariant v, ref const TestCase t)
 
 	return format(
 		"\t// %s, opcode $%02x: \"%s\"\n" ~
-		"\tcheckInstruction!(CpuVariant.%s)(\n" ~
+		"\tcheckInstruction!(Cpu.%s)(\n" ~
 		"\t\t%S, %s,\n" ~
 		"\t\t%S, %s,\n" ~
 		"\t\t\"%-(%s  %)\");\n",
@@ -287,7 +287,7 @@ string emitUnittest(CpuVariant v, ref const TestCase t)
 		t.cycles);
 }
 
-Result runOpcode(CpuVariant v)(string path, ubyte opcode, bool emitUnittests)
+Result runOpcode(Cpu v)(string path, ubyte opcode, bool emitUnittests)
 {
 	Result r = { opcode: opcode };
 	auto emu = new Emulator!(v, BusTrace)();
@@ -317,17 +317,17 @@ Result runOpcode(CpuVariant v)(string path, ubyte opcode, bool emitUnittests)
 struct Target
 {
 	string dir;
-	CpuVariant cpu;
+	Cpu cpu;
 }
 
 immutable Target[] targets = [
-	Target("6502",          CpuVariant.mos_6502),
-	Target("synertek65c02", CpuVariant.wdc_65c02),
-	Target("rockwell65c02", CpuVariant.rockwell_r65c02),
-	Target("wdc65c02",      CpuVariant.wdc_w65c02s),
+	Target("6502",          Cpu.mos_6502),
+	Target("synertek65c02", Cpu.wdc_65c02),
+	Target("rockwell65c02", Cpu.rockwell_r65c02),
+	Target("wdc65c02",      Cpu.wdc_w65c02s),
 ];
 
-size_t runTarget(CpuVariant v)(string dir, const(ubyte)[] opcodes, bool emitUnittests)
+size_t runTarget(Cpu v)(string dir, const(ubyte)[] opcodes, bool emitUnittests)
 {
 	auto results = new Result[opcodes.length];
 	foreach (i, opcode; opcodes.parallel)
@@ -466,7 +466,7 @@ int main(string[] args)
 		stdout.flush();
 		dispatch: switch (target.cpu)
 		{
-			static foreach (v; EnumMembers!CpuVariant)
+			static foreach (v; EnumMembers!Cpu)
 			{
 			case v:
 				failed += runTarget!v(dataDir, opcodes, emitUnittests);

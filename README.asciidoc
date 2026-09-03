@@ -119,7 +119,7 @@ Disassembling binary file
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ----------------------------
-$ xebin d[isasm] [-o=fn] [input_files]
+$ xebin d[isasm] [-c=cpu] [-o=fn] [input_files]
 ----------------------------
 
 Each block is disassembled as code, preceded by an +ORG+ directive with its load
@@ -131,10 +131,13 @@ run and init addresses. Addresses outside the loaded blocks are defined with +EQ
 the beginning of the output, and a reference pointing into the middle of an instruction
 is printed as an offset from that instruction's label, e.g. +L2103+1+.
 
-Opcode names and argument syntax are taken from http://atari800.sourceforge.net/[Atari 800]
-emulator. Bytes that do not decode into an official 6502 instruction, as well as an
-instruction truncated by the end of a block, are emitted as +DTA+, so that the whole
-output can be fed back to http://atariarea.krap.pl/x-asm/[xasm] and assembled into
+Option +-c=cpu+ or +--cpu=cpu+ selects the instruction set: +6502+ (NMOS, the default),
++65c02+ (WDC 65C02), +r65c02+ (Rockwell R65C02, adding +RMB+/+SMB+/+BBR+/+BBS+) or
++w65c02s+ (adding +WAI+ and +STP+).
+
+Bytes that do not decode into a documented instruction of the selected CPU, as well as
+an instruction truncated by the end of a block, are emitted as +DTA+, so that the whole
+output can be fed back to https://github.com/pfusik/xasm[xasm] and assembled into
 the original file.
 
 Example output:
