@@ -27,14 +27,21 @@
 	   distribution.
 */
 
+import std.algorithm : canFind, filter, map;
 import std.array : appender;
-import std.file : exists;
+import std.conv : to;
+import std.file : exists, read;
 import std.format;
 import std.getopt;
+import std.parallelism : parallel;
 import std.path : buildPath;
+import std.range : array, iota, split;
 import std.stdio;
+import std.string : strip;
+import std.traits : EnumMembers;
 
 import stdx.data.json;
+import xebin.emu;
 
 /*	Emits `TaggedAlgebraic.opEquals` into this object file.
 
@@ -171,6 +178,74 @@ unittest
 	assert(tests[0].cycles == [Access(59082, 177, false), Access(40, 160, true)]);
 }
 
+struct Result
+{
+	ubyte opcode;
+	size_t total, failed;
+}
+
+Result runOpcode(CpuVariant v)(string path, ubyte opcode)
+{
+	Result r = { opcode: opcode };
+
+	foreach (ref t; parseTests(cast(string) read(path)))
+	{
+	}
+
+	return r;
+}
+
+struct Target
+{
+	string dir;
+	CpuVariant cpu;
+}
+
+immutable Target[] targets = [
+	Target("6502",          CpuVariant.mos_6502),
+	Target("synertek65c02", CpuVariant.wdc_65c02),
+	Target("rockwell65c02", CpuVariant.rockwell_r65c02),
+	Target("wdc65c02",      CpuVariant.wdc_w65c02s),
+];
+
+size_t runTarget(CpuVariant v)(string dir, const(ubyte)[] opcodes)
+{
+	auto results = new Result[opcodes.length];
+	foreach (i, opcode; opcodes.parallel)
+	{
+		const path = buildPath(dir, format("%02x.json", opcode));
+		results[i] = exists(path)
+			? runOpcode!v(path, opcode)
+			: Result(opcode);
+	}
+
+	size_t failed;
+	return failed;
+}
+
+ubyte[] parseOpcodes(string spec)
+{
+	if (!spec.length)
+		return iota(256).map!(i => cast(ubyte) i).array;
+	bool[256] set;
+	foreach (part; spec.split(","))
+	{
+		const range = part.split("-").map!(a => a.to!uint(16)).array;
+		const lo = range[0];
+		const hi = range.length > 1 ? range[1] : lo;
+		foreach (i; lo .. hi + 1)
+			set[i] = true;
+	}
+	return iota(256).filter!(i => set[i]).map!(i => cast(ubyte) i).array;
+}
+
+unittest
+{
+	assert(parseOpcodes("a9") == [0xa9]);
+	assert(parseOpcodes("b1-b5,00") == [0x00, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5]);
+	assert(parseOpcodes("").length == 256);
+}
+
 string findSuite(string dir)
 {
 	if (dir.length)
@@ -184,8 +259,13 @@ string findSuite(string dir)
 int main(string[] args)
 {
 	string dir;
+	string cpuSpec;
+	string opcodeSpec;
+
 	auto help = getopt(args,
-		"d|dir", "root of SingleStepTests/65x02", &dir);
+		"d|dir",     "root of SingleStepTests/65x02", &dir,
+		"c|cpu",     "CPUs to test, comma separated (default: all found).", &cpuSpec,
+		"o|opcodes", "Opcodes in hex, e.g. a9,1e,b1-b5 (default: all).", &opcodeSpec);
 
 	if (help.helpWanted)
 	{
@@ -201,6 +281,42 @@ int main(string[] args)
 			"https://github.com/SingleStepTests/65x02 and pass --dir=<path>");
 		return 2;
 	}
+
+	const opcodes = parseOpcodes(opcodeSpec);
+	const cpus = cpuSpec.length ? cpuSpec.split(",") : null;
+
+	size_t failed;
+	size_t ran;
+	foreach (target; targets)
+	{
+		if (cpus !is null && !cpus.canFind(target.dir) &&
+			!cpus.canFind(target.cpu.to!string))
+			continue;
+		const dataDir = buildPath(root, target.dir, "v1");
+		if (!exists(dataDir))
+			continue;
+		++ran;
+		writefln("%s (%s)", target.cpu, target.dir);
+		stdout.flush();
+		dispatch: switch (target.cpu)
+		{
+			static foreach (v; EnumMembers!CpuVariant)
+			{
+			case v:
+				failed += runTarget!v(dataDir, opcodes);
+				break dispatch;
+			}
+		default:
+			assert(0);
+		}
+	}
+
+	if (!ran)
+	{
+		stderr.writefln("nothing to run -- no family member under %s matched --cpu", root);
+		return 2;
+	}
+	writefln("%d opcode%s with failures", failed, failed == 1 ? "" : "s");
 
 	return 0;
 }
