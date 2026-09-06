@@ -25,3 +25,25 @@ jobs:
       - name: Run tests
         shell: bash
         run: dub test
+
+  singlestep:
+    name: Single Step Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout xebin
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install D compiler
+        uses: dlang-community/setup-dlang@v2
+        with:
+          compiler: ldc
+
+      - name: Checkout SingleStepTests/65x02
+        uses: actions/checkout@v7
+        with:
+          repository: SingleStepTests/65x02
+          path: ext/65x02
+
+      - run: dub run -b release :singlestep -- --dir="${{ github.workspace }}/ext/65x02"
