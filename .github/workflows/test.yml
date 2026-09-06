@@ -1,0 +1,27 @@
+name: tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: dub tests
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macOS-latest]
+        dc: [dmd, ldc]
+        exclude:
+          - { os: macOS-latest, dc: dmd }
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install D compiler
+        uses: dlang-community/setup-dlang@v2
+        with:
+          compiler: ${{ matrix.dc }}
+
+      - name: Run tests
+        shell: bash
+        run: dub test
