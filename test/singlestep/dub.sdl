@@ -1,0 +1,7 @@
+name "singlestep"
+description "Runs SingleStepTests/65x02 against xebin.emu"
+targetType "executable"
+targetName "singlestep"
+
+dependency "xebin" path="../.."
+dependency "std_data_json" version="~>0.18.7"

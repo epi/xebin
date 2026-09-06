@@ -5,3 +5,6 @@
 /*.obj
 /libxebin.a
 /cputest/bin/
+dub.selections.json
+/test/singlestep/singlestep
+/ext/65x02/
