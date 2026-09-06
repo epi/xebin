@@ -157,10 +157,9 @@ enum trb = q{ ubyte tmp = @r; zflag = (a & tmp) == 0; @w(cast(ubyte) (tmp & ~a))
 ///
 enum CpuVariant {
 	mos_6502,        /// NMOS
-	wdc_65c02,       /// original CMOS re-design
-	gte_65sc02,      /// e.g. Lynx
-	rockwell_r65c02, /// Rockwell
-	wdc_w65c02s,     /// modern W65C02S
+	wdc_65c02,       /// original CMOS (also Synertek, GTE, etc.), part of Lynx's Mikey
+	rockwell_r65c02, /// Rockwell (bit ops)
+	wdc_w65c02s,     /// modern W65C02S (bit ops + WAI/STP)}
 }
 
 ///	Basic CMOS instruction set + BCD and JMP (abs) fixes.
@@ -857,8 +856,7 @@ unittest
 	}
 
 	// ... while the CMOS parts see it as an ordinary two-byte NOP.
-	static foreach (v; [CpuVariant.wdc_65c02, CpuVariant.gte_65sc02,
-		CpuVariant.rockwell_r65c02, CpuVariant.wdc_w65c02s])
+	static foreach (v; [CpuVariant.wdc_65c02, CpuVariant.rockwell_r65c02, CpuVariant.wdc_w65c02s])
 	{{
 		auto emu = new Emulator!v();
 		load(emu, 0x1000, [ubyte(0x02), 0x37, 0xe8]);
