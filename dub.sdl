@@ -5,3 +5,5 @@ copyright "Copyright © 2010-2014, 2017, 2023, 2026 Adrian Matoga"
 license "Zlib"
 
 dependency "xasm" path="ext/xasm"
+
+subPackage "test/singlestep"
