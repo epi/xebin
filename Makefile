@@ -50,6 +50,9 @@ install:
 test:
 	dub test
 
+singlestep:
+	dub run -b release :singlestep -- -o ea
+
 .PHONY: all doc debug dist windist srcdist clean install test
 
 .DELETE_ON_ERROR:
