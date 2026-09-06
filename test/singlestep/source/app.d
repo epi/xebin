@@ -27,10 +27,149 @@
 	   distribution.
 */
 
+import std.array : appender;
 import std.file : exists;
+import std.format;
 import std.getopt;
 import std.path : buildPath;
 import std.stdio;
+
+import stdx.data.json;
+
+/*	Emits `TaggedAlgebraic.opEquals` into this object file.
+
+	We never build a DOM, but importing the parser drags `JSONValue`'s TypeInfo
+	in, and under separate compilation nobody instantiates the comparison it
+	refers to -- so the link fails. Naming it here fixes that; without this,
+	the subpackage only builds with `dub --combined`.
+*/
+private bool forceJSONValueOpEquals(const JSONValue a, const JSONValue b)
+{
+	return a == b;
+}
+
+struct Access
+{
+	ushort addr;
+	ubyte value;
+	bool write;
+
+	string toString() const
+	{
+		return format("%s %04x %02x", write ? "W" : "R", addr, value);
+	}
+}
+
+struct State
+{
+	ushort pc;
+	ubyte sp, a, x, y, p;
+
+	string toString() const
+	{
+		return format("pc=%04x s=%02x a=%02x x=%02x y=%02x p=%02x",
+			pc, sp, a, x, y, p);
+	}
+}
+
+struct Cell
+{
+	ushort addr;
+	ubyte value;
+}
+
+struct TestCase
+{
+	string name;
+	State initial, expected;
+	Cell[] initialRam, expectedRam;
+	Access[] cycles;
+}
+
+TestCase[] parseTests(string text)
+{
+	auto json = parseJSONStream(text);
+	auto tests = appender!(TestCase[]);
+	TestCase t;
+
+	void readState(ref State s, ref Cell[] ram)
+	{
+		json.readObject((string key) {
+			switch (key)
+			{
+			case "pc": s.pc = cast(ushort) json.readDouble(); break;
+			case "s":  s.sp = cast(ubyte) json.readDouble(); break;
+			case "a":  s.a = cast(ubyte) json.readDouble(); break;
+			case "x":  s.x = cast(ubyte) json.readDouble(); break;
+			case "y":  s.y = cast(ubyte) json.readDouble(); break;
+			case "p":  s.p = cast(ubyte) json.readDouble() & ~0x10; break; // ignore p.b as it isn't stored in CPU
+			case "ram":
+				json.readArray({
+					Cell c;
+					size_t i;
+					json.readArray({
+						const n = cast(uint) json.readDouble();
+						if (i++ == 0)
+							c.addr = cast(ushort) n;
+						else
+							c.value = cast(ubyte) n;
+					});
+					ram ~= c;
+				});
+				break;
+			default: json.skipValue(); break;
+			}
+		});
+	}
+
+	json.readArray({
+		t = TestCase.init;
+		json.readObject((string key) {
+			switch (key)
+			{
+			case "name": t.name = json.readString(); break;
+			case "initial": readState(t.initial, t.initialRam); break;
+			case "final": readState(t.expected, t.expectedRam); break;
+			case "cycles":
+				json.readArray({
+					Access acc;
+					size_t i;
+					json.readArray({
+						switch (i++)
+						{
+						case 0: acc.addr = cast(ushort) json.readDouble(); break;
+						case 1: acc.value = cast(ubyte) json.readDouble(); break;
+						default: acc.write = json.readString() == "write"; break;
+						}
+					});
+					t.cycles ~= acc;
+				});
+				break;
+			default: json.skipValue(); break;
+			}
+		});
+		tests ~= t;
+	});
+	return tests.data;
+}
+
+unittest
+{
+	auto tests = parseTests(`[
+		{ "name": "b1 28 b5",
+		  "initial": { "pc": 59082, "s": 39, "a": 57, "x": 33, "y": 174, "p": 96,
+		    "ram": [ [59082, 177], [40, 160]]},
+		  "final": { "pc": 59084, "s": 39, "a": 119, "x": 33, "y": 174, "p": 96,
+		    "ram": [ [40, 160]]},
+		  "cycles": [ [59082, 177, "read"], [40, 160, "write"]] }
+		]`);
+	assert(tests.length == 1);
+	assert(tests[0].name == "b1 28 b5");
+	assert(tests[0].initial == State(59082, 39, 57, 33, 174, 96));
+	assert(tests[0].expected.a == 119);
+	assert(tests[0].initialRam == [Cell(59082, 177), Cell(40, 160)]);
+	assert(tests[0].cycles == [Access(59082, 177, false), Access(40, 160, true)]);
+}
 
 string findSuite(string dir)
 {

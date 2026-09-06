@@ -46,4 +46,5 @@ jobs:
           repository: SingleStepTests/65x02
           path: ext/65x02
 
+      - run: dub test :singlestep
       - run: dub run -b release :singlestep -- --dir="${{ github.workspace }}/ext/65x02"
