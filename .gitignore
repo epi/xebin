@@ -7,4 +7,5 @@
 /cputest/bin/
 dub.selections.json
 /test/singlestep/singlestep
+/test/singlestep/xebin-singlestep-test-application
 /ext/65x02/
