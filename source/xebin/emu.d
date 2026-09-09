@@ -45,6 +45,10 @@ q{
 			cflag = false;
 			a = tmp & 0xff;
 		}
+		static if (isCmos!cpuVariant)
+			setNZ(a);
+		else
+			setNZ(tmp & 0xff);
 	}
 };
 
@@ -68,6 +72,8 @@ q{
 		if (res < 0)
 			res -= 0x60;
 		a = cast(ubyte) res;
+		static if (isCmos!cpuVariant)
+			setNZ(a);
 	}
 	cflag = tmp >= 0x100;
 };
@@ -110,8 +116,31 @@ q{
 	nflag = (@ & 0x80) != 0;
 	vflag = (@ & 0x40) != 0;
 };
+enum tsb = q{ zflag = (a & @) == 0; @ = cast(ubyte) (@ | a); };
+enum trb = q{ zflag = (a & @) == 0; @ = cast(ubyte) (@ & ~a); };
 
-class Emulator
+
+///
+enum CpuVariant {
+	mos_6502,        /// NMOS
+	wdc_65c02,       /// original CMOS re-design
+	gte_65sc02,      /// e.g. Lynx
+	rockwell_r65c02, /// Rockwell
+	wdc_w65c02s,     /// modern W65C02S
+}
+
+/// Basic CMOS instruction set + BCD and JMP (abs) fixes.
+enum bool isCmos(CpuVariant v) = v != CpuVariant.mos_6502;
+
+/// Rockwell's RMBn/SMBn/BBRn/BBSn, carried over into the W65C02S.
+enum bool hasBitOps(CpuVariant v) =
+	v == CpuVariant.rockwell_r65c02 || v == CpuVariant.wdc_w65c02s;
+
+/// WAI and STP, added by the W65C02S; NOPs everywhere else.
+enum bool hasWaiStp(CpuVariant v) = v == CpuVariant.wdc_w65c02s;
+
+///
+class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 {
 	private ubyte[] memory;
 	private void delegate()[ubyte] traps;
@@ -121,6 +150,8 @@ class Emulator
 	long instructionLimit = -1;
 
 	bool stopOnEmptyStackRts = true;
+
+	bool stopped;
 
 	ubyte a;
 	ubyte x;
@@ -158,7 +189,7 @@ class Emulator
 		dpoke(0x2e5, 0xbc1f);
 		dpoke(0xa, 0x700);
 
-		memory[0x0700] = 0xf2;
+		memory[0x0700] = 0x02;
 		memory[0x0701] = 0x00;
 		traps[0] =
 		{
@@ -166,12 +197,12 @@ class Emulator
 			exit(0);
 		};
 
-		memory[0xe456] = 0xf2;
+		memory[0xe456] = 0x02;
 		memory[0xe457] = 0x01;
 		memory[0xe458] = 0x60;
 		traps[1] = &cio;
 
-		memory[0xfff8] = 0xf2; // trap
+		memory[0xfff8] = 0x02; // host escape
 		memory[0xfff9] = 0x02;
 		memory[0xfffa] = 0xf8; // nmi vector
 		memory[0xfffb] = 0xff;
@@ -275,6 +306,34 @@ class Emulator
 		addr += x;
 		addr = makeWord(memory[(addr + 1) & 0xff], memory[addr & 0xff]);
 		mixin(replace(expr, "@", "memory[addr]"));
+	}
+
+	static if (isCmos!cpuVariant)
+	void doIndirectZP(string expr)()
+	{
+		ushort zp = fetchByte();
+		ushort addr = makeWord(memory[(zp + 1) & 0xff], memory[zp]);
+		mixin(replace(expr, "@", "memory[addr]"));
+	}
+
+	static if (isCmos!cpuVariant)
+	void doBitSetReset(ubyte mask, bool set)()
+	{
+		const ubyte addr = fetchByte();
+		static if (set)
+			memory[addr] |= mask;
+		else
+			memory[addr] &= cast(ubyte) ~mask;
+	}
+
+	static if (hasBitOps!cpuVariant)
+	void doBitBranch(ubyte mask, bool branchIfSet)()
+	{
+		const ubyte zp = fetchByte();
+		const bool isSet = (memory[zp] & mask) != 0;
+		const byte offs = fetchByte();
+		if (isSet == branchIfSet)
+			pc = cast(ushort) (pc + offs);
 	}
 
 	void doBranch(string pred)()
@@ -513,7 +572,7 @@ class Emulator
 				info.clear();
 			}
 
-			switch (instr)
+			dispatch: switch (instr)
 			{
 			case 0x00:
 				push((pc + 2) >> 8);
@@ -527,8 +586,32 @@ class Emulator
 					(zflag ? 0x02 : 0) |
 					(cflag ? 0x01 : 0));
 				iflag = true;
+				static if (isCmos!cpuVariant)
+					dflag = false;
 				pc = dpeek(0xfffe);
 				--pc;
+				break;
+			// Host escape: $02 followed by a selector byte.
+			// Two-byte encoding on all 6502 variants:
+			// JAM on NMOS, a 2-byte NOP on the CMOS parts, and COP on the 65C816
+			// (and COP's signature byte is the selector).
+			// An unregistered selector falls back to silicon behavior.
+			case 0x02:
+				{
+					const selector = fetchByte();
+					if (auto trap = selector in traps)
+						(*trap)();
+					else
+					{
+						static if (isCmos!cpuVariant) {}
+						else
+						{
+							--pc;   // JAM: report the address of the $02 itself
+							stopped = true;
+							return;
+						}
+					}
+				}
 				break;
 			case 0x01: doIndirectX!ora(); break;
 			case 0x05: doAbsoluteZP!ora(); break;
@@ -726,13 +809,85 @@ class Emulator
 			case 0xee: doAbsolute!inc(); break;
 			case 0xf0: doBranch!"zflag"(); break;
 			case 0xf1: doIndirectY!sbc(); break;
-			case 0xf2: traps[fetchByte()](); break;
 			case 0xf5: doAbsoluteZP!sbc(x); break;
 			case 0xf6: doAbsoluteZP!inc(x); break;
 			case 0xf8: dflag = true; break;
 			case 0xf9: doAbsolute!sbc(y); break;
 			case 0xfd: doAbsolute!sbc(x); break;
 			case 0xfe: doAbsolute!inc(x); break;
+			static if (isCmos!cpuVariant) {
+			case 0x1a: setNZ(a = cast(ubyte) (a + 1)); break;
+			case 0x3a: setNZ(a = cast(ubyte) (a - 1)); break;
+			case 0x5a: push(y); break;
+			case 0x7a: setNZ(y = pop()); break;
+			case 0xda: push(x); break;
+			case 0xfa: setNZ(x = pop()); break;
+			case 0x80: doBranch!"true"(); break;
+			case 0x89: ++pc; zflag = (a & memory[pc]) == 0; break; // BIT #imm
+			case 0x64: doAbsoluteZP!"st(addr, 0);"(); break;
+			case 0x74: doAbsoluteZP!"st(addr, 0);"(x); break;
+			case 0x9c: doAbsolute!"st(addr, 0);"(); break;
+			case 0x9e: doAbsolute!"st(addr, 0);"(x); break;
+			case 0x12: doIndirectZP!ora(); break;
+			case 0x32: doIndirectZP!and(); break;
+			case 0x52: doIndirectZP!eor(); break;
+			case 0x72: doIndirectZP!adc(); break;
+			case 0x92: doIndirectZP!"st(addr, a);"(); break;
+			case 0xb2: doIndirectZP!lda(); break;
+			case 0xd2: doIndirectZP!cmp(); break;
+			case 0xf2: doIndirectZP!sbc(); break;
+			case 0x04: doAbsoluteZP!tsb(); break;
+			case 0x0c: doAbsolute!tsb(); break;
+			case 0x14: doAbsoluteZP!trb(); break;
+			case 0x1c: doAbsolute!trb(); break;
+			case 0x34: doAbsoluteZP!bit(x); break;
+			case 0x3c: doAbsolute!bit(x); break;
+			case 0x7c:
+				pc = dpeek(cast(ushort) (fetchWord() + x));
+				--pc;
+				break;
+			static foreach (n; 0 .. 8)
+			{
+				static if (hasBitOps!cpuVariant)
+				{
+			case 0x07 + n * 0x10: doBitSetReset!(1 << n, false)(); break dispatch;
+			case 0x87 + n * 0x10: doBitSetReset!(1 << n, true)(); break dispatch;
+			case 0x0f + n * 0x10: doBitBranch!(1 << n, false)(); break dispatch;
+			case 0x8f + n * 0x10: doBitBranch!(1 << n, true)(); break dispatch;
+				}
+				else
+				{
+			case 0x07 + n * 0x10:
+			case 0x87 + n * 0x10:
+			case 0x0f + n * 0x10:
+			case 0x8f + n * 0x10: break dispatch;
+				}
+			}
+			case 0xcb: // TODO: interrupts
+			case 0xdb:
+				static if (hasWaiStp!cpuVariant)
+				{
+					stopped = true;
+					return;
+				}
+				else
+					break;
+			case 0x03: case 0x13: case 0x23: case 0x33:
+			case 0x43: case 0x53: case 0x63: case 0x73:
+			case 0x83: case 0x93: case 0xa3: case 0xb3:
+			case 0xc3: case 0xd3: case 0xe3: case 0xf3:
+			case 0x0b: case 0x1b: case 0x2b: case 0x3b:
+			case 0x4b: case 0x5b: case 0x6b: case 0x7b:
+			case 0x8b: case 0x9b: case 0xab: case 0xbb:
+			case 0xeb: case 0xfb:
+				break; // 1-byte NOP
+			case 0x22: case 0x42: case 0x62: case 0x82:
+			case 0xc2: case 0xe2: case 0x44: case 0x54:
+			case 0xd4: case 0xf4:
+				++pc; break; // 2-byte NOP
+			case 0x5c: case 0xdc: case 0xfc:
+				pc += 2; break; // 3-byte NOP
+			}
 			default:
 				throw new Exception(
 					format("Unimplemented instruction %02X", instr));
@@ -758,7 +913,7 @@ private version(unittest) {
 	enum long instructionsChunk = 1_000_000;
 	enum long instructionsLimit = 500_000_000;
 
-	bool isStuckSelfLoop(Emulator emu, ushort address)
+	bool isStuckSelfLoop(E)(E emu, ushort address)
 	{
 		const opcode = emu.ld(address);
 		if (opcode == 0x4c)                                  // jmp *
@@ -780,7 +935,7 @@ private version(unittest) {
 		}
 	}
 
-	ushort runToSelfLoop(Emulator emu, immutable(ubyte)[] image)
+	ushort runToSelfLoop(E)(E emu, immutable(ubyte)[] image)
 	{
 		foreach (i, b; image)
 			emu.st(cast(ushort) i, b);
@@ -809,7 +964,7 @@ private version(unittest) {
 			instructionsLimit, emu.pc, emu.ld(testCaseVar)));
 	}
 
-	bool check(Emulator emu, string what, immutable(ubyte)[] image,
+	bool check(E)(E emu, string what, immutable(ubyte)[] image,
 		ushort successAddress)
 	{
 		writef("%-34s ", what ~ ":");
@@ -842,10 +997,17 @@ unittest
 
 	// TODO: build tests from source instead of getting a magic address
 	// manually from listings.
-	ok &= check(new Emulator,
+	ok &= check(new Emulator!(),
 		"6502 functional test",
 		cast(immutable(ubyte)[]) read("ext/6502_65C02_functional_tests/bin_files/6502_functional_test.bin"),
 		0x3469);
+
+	// Built with wdc_op=1 (WAI/STP skipped), rkwl_wdc_op=1 (BBR/BBS/RMB/SMB
+	// fully tested) and skip_nop=0 (every undefined opcode tested as a NOP).
+	ok &= check(new Emulator!(CpuVariant.wdc_w65c02s),
+		"65C02 extended opcodes test",
+		cast(immutable(ubyte)[]) read("ext/6502_65C02_functional_tests/bin_files/65C02_extended_opcodes_test.bin"),
+		0x24f1);
 
 	writeln(ok ? "all CPU tests passed" : "CPU TESTS FAILED");
 	assert(ok);
