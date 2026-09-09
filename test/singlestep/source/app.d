@@ -56,9 +56,9 @@ struct Access
 	ubyte value;
 	bool write;
 
-	string toString() const
+	void toString(W)(scope W writer) const
 	{
-		return format("%s %04x %02x", write ? "W" : "R", addr, value);
+		writer.formattedWrite!"%s %04x %02x"(write ? "W" : "R", addr, value);
 	}
 }
 
@@ -67,10 +67,16 @@ struct State
 	ushort pc;
 	ubyte sp, a, x, y, p;
 
-	string toString() const
+	void toString(W)(scope W writer, FormatSpec!char fmt) const
 	{
-		return format("pc=%04x s=%02x a=%02x x=%02x y=%02x p=%02x",
-			pc, sp, a, x, y, p);
+		if (fmt.spec == 's')
+			writer.formattedWrite!"pc=%04x s=%02x a=%02x x=%02x y=%02x p=%02x"(
+				pc, sp, a, x, y, p);
+		else if (fmt.spec == 'S')
+			writer.formattedWrite!"State(0x%04x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x)"(
+				pc, sp, a, x, y, p);
+		else
+			assert(0);
 	}
 }
 
@@ -78,6 +84,11 @@ struct Cell
 {
 	ushort addr;
 	ubyte value;
+
+	void toString(W)(scope W writer) const
+	{
+		writer.formattedWrite!"[0x%04x, 0x%02x]"(addr, value);
+	}
 }
 
 struct TestCase
@@ -173,19 +184,6 @@ unittest
 	assert(tests[0].cycles == [Access(59082, 177, false), Access(40, 160, true)]);
 }
 
-struct Trace
-{
-	ubyte[] ram;
-	Access[] accesses;
-
-	void instruction(E)(E emu) {}
-	void fetch(ushort addr, ubyte value) { accesses ~= Access(addr, value, false); }
-	void read(ushort addr, ubyte value) { accesses ~= Access(addr, value, false); }
-	void write(ushort addr, ubyte value) { accesses ~= Access(addr, value, true); }
-	void idle(ushort addr) { accesses ~= Access(addr, ram[addr], false); }
-	void endInstruction() {}
-}
-
 string runOne(E)(E emu, ref const TestCase t)
 {
 	foreach (c; t.initialRam)
@@ -199,8 +197,6 @@ string runOne(E)(E emu, ref const TestCase t)
 	emu.stopped = false;
 	emu.instructions = 0;
 	emu.instructionLimit = 1;
-	emu.observer.accesses.length = 0;
-	emu.observer.accesses.assumeSafeAppend();
 
 	string thrown = collectExceptionMsg(emu.run());
 
@@ -233,13 +229,30 @@ struct Result
 	ubyte opcode;
 	size_t total, failed;
 	string[] reports;
+	string[] unittests;
 }
 
-Result runOpcode(CpuVariant v)(string path, ubyte opcode)
+string emitUnittest(CpuVariant v, ref const TestCase t)
+{
+	ubyte[ushort] before;
+	foreach (c; t.initialRam)
+		before[c.addr] = c.value;
+	auto changed = t.expectedRam.filter!(c => before.get(c.addr, 0) != c.value).array;
+
+	return format(
+		"\t// %s, opcode $%02x: \"%s\"\n" ~
+		"\tcheckInstruction!(CpuVariant.%s)(\n" ~
+		"\t\t%S, %s,\n" ~
+		"\t\t%S, %s);\n",
+		v, t.cycles.length ? t.cycles[0].value : 0, t.name, v,
+		t.initial, t.initialRam,
+		t.expected, changed);
+}
+
+Result runOpcode(CpuVariant v)(string path, ubyte opcode, bool emitUnittests)
 {
 	Result r = { opcode: opcode };
-	auto emu = new Emulator!(v, Trace)();
-	emu.observer.ram = emu.ram;
+	auto emu = new Emulator!v();
 	emu.stopOnEmptyStackRts = false;
 
 	auto text = strip(cast(string) read(path));
@@ -254,6 +267,8 @@ Result runOpcode(CpuVariant v)(string path, ubyte opcode)
 			++r.failed;
 			if (r.reports.length < 5)
 				r.reports ~= diag;
+			if (emitUnittests && r.unittests.length < 5)
+				r.unittests ~= emitUnittest(v, t);
 		}
 	}
 
@@ -273,14 +288,14 @@ immutable Target[] targets = [
 	Target("wdc65c02",      CpuVariant.wdc_w65c02s),
 ];
 
-size_t runTarget(CpuVariant v)(string dir, const(ubyte)[] opcodes)
+size_t runTarget(CpuVariant v)(string dir, const(ubyte)[] opcodes, bool emitUnittests)
 {
 	auto results = new Result[opcodes.length];
 	foreach (i, opcode; opcodes.parallel)
 	{
 		const path = buildPath(dir, format("%02x.json", opcode));
 		results[i] = exists(path)
-			? runOpcode!v(path, opcode)
+			? runOpcode!v(path, opcode, emitUnittests)
 			: Result(opcode);
 	}
 
@@ -299,6 +314,8 @@ size_t runTarget(CpuVariant v)(string dir, const(ubyte)[] opcodes)
 				r.failed ? "FAIL "  : "ok");
 		foreach (report; r.reports)
 			writeln(report);
+		foreach (ut; r.unittests)
+			writeln(ut);
 	}
 	return failed;
 
@@ -306,18 +323,41 @@ size_t runTarget(CpuVariant v)(string dir, const(ubyte)[] opcodes)
 	return failed;
 }
 
-ubyte[] parseOpcodes(string spec)
+ubyte[] parseOpcodes(string spec, bool skipUndocumented)
 {
-	if (!spec.length)
-		return iota(256).map!(i => cast(ubyte) i).array;
 	bool[256] set;
-	foreach (part; spec.split(","))
+	if (!spec.length)
+		set[] = true;
+	else foreach (part; spec.split(","))
 	{
 		const range = part.split("-").map!(a => a.to!uint(16)).array;
 		const lo = range[0];
 		const hi = range.length > 1 ? range[1] : lo;
 		foreach (i; lo .. hi + 1)
 			set[i] = true;
+	}
+	if (skipUndocumented) {
+		static immutable undocumentedOpcodes = [
+			0x02, 0x03, 0x04, 0x07, 0x0B, 0x0C, 0x0F,
+			0x12, 0x13, 0x14, 0x17, 0x1A, 0x1B, 0x1C, 0x1F,
+			0x22, 0x23, 0x27, 0x2B, 0x2F,
+			0x32, 0x33, 0x34, 0x37, 0x3A, 0x3B, 0x3C, 0x3F,
+			0x42, 0x43, 0x44, 0x47, 0x4B, 0x4F,
+			0x52, 0x53, 0x54, 0x57, 0x5A, 0x5B, 0x5C, 0x5F,
+			0x62, 0x63, 0x64, 0x67, 0x6B, 0x6F,
+			0x72, 0x73, 0x74, 0x77, 0x7A, 0x7B, 0x7C, 0x7F,
+			0x80, 0x82, 0x83, 0x87, 0x89, 0x8B, 0x8F,
+			0x92, 0x93, 0x97, 0x9B, 0x9C, 0x9E, 0x9F,
+			0xA3, 0xA7, 0xAB, 0xAF,
+			0xB2, 0xB3, 0xB7, 0xBB, 0xBF,
+			0xC2, 0xC3, 0xC7, 0xCB, 0xCF,
+			0xD2, 0xD3, 0xD4, 0xD7, 0xDA, 0xDB, 0xDC, 0xDF,
+			0xE2, 0xE3, 0xE7, 0xEB, 0xEF,
+			0xF2, 0xF3, 0xF4, 0xF7, 0xFA, 0xFB, 0xFC, 0xFF
+		];
+		static assert(undocumentedOpcodes.length == 105);
+		foreach (o; undocumentedOpcodes)
+			set[o] = false;
 	}
 	return iota(256).filter!(i => set[i]).map!(i => cast(ubyte) i).array;
 }
@@ -344,11 +384,15 @@ int main(string[] args)
 	string dir;
 	string cpuSpec;
 	string opcodeSpec;
+	bool skipUndocumented;
+	bool emitUnittests;
 
 	auto help = getopt(args,
-		"d|dir",     "root of SingleStepTests/65x02", &dir,
-		"c|cpu",     "CPUs to test, comma separated (default: all found).", &cpuSpec,
-		"o|opcodes", "Opcodes in hex, e.g. a9,1e,b1-b5 (default: all).", &opcodeSpec);
+		"d|dir",      "root of SingleStepTests/65x02", &dir,
+		"c|cpu",      "CPUs to test, comma separated (default: all found).", &cpuSpec,
+		"o|opcodes",  "Opcodes in hex, e.g. a9,1e,b1-b5 (default: all).", &opcodeSpec,
+		"u|skip-undocumented", "Skip undocumented NMOS 6502 opcodes.", &skipUndocumented,
+		"t|unittest", "Emit unittests for failing cases.", &emitUnittests);
 
 	if (help.helpWanted)
 	{
@@ -365,7 +409,7 @@ int main(string[] args)
 		return 2;
 	}
 
-	const opcodes = parseOpcodes(opcodeSpec);
+	const opcodes = parseOpcodes(opcodeSpec, skipUndocumented);
 	const cpus = cpuSpec.length ? cpuSpec.split(",") : null;
 
 	size_t failed;
@@ -386,7 +430,7 @@ int main(string[] args)
 			static foreach (v; EnumMembers!CpuVariant)
 			{
 			case v:
-				failed += runTarget!v(dataDir, opcodes);
+				failed += runTarget!v(dataDir, opcodes, emitUnittests);
 				break dispatch;
 			}
 		default:
