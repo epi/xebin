@@ -25,7 +25,11 @@ module xebin.emu;
 
 import std.string;
 
-version(unittest) import std.stdio;
+version(unittest)
+{
+	import std.stdio;
+	import std.format : formattedWrite;
+}
 
 private ushort makeWord(uint b1, uint b0)
 {
@@ -50,53 +54,55 @@ q{
 	else
 	{
 		uint al = (a & 0x0f) + (arg & 0x0f) + cflag;
-		if (al >= 10)
-		{
-			tmp += al < 26 ? 6 : -10;
-			nflag = (tmp & 0x80) != 0;
-		}
-		vflag = (~(arg ^ a) & (a ^ tmp) & 0x80) != 0;
-		if (tmp >= 0xa0)
-		{
-			cflag = true;
-			a = (tmp + 0x60) & 0xff;
-		}
-		else
-		{
-			cflag = false;
-			a = tmp & 0xff;
-		}
+		if (al >= 0x0a)
+			al = ((al + 0x06) & 0x0f) + 0x10;
+		uint sum = (a & 0xf0) + (arg & 0xf0) + al;
+		nflag = (sum & 0x80) != 0;
+		vflag = (~(arg ^ a) & (a ^ sum) & 0x80) != 0;
+		zflag = (tmp & 0xff) == 0;
+		if (sum >= 0xa0)
+			sum += 0x60;
+		cflag = sum >= 0x100;
+		a = cast(ubyte) sum;
 		static if (isCmos!cpuVariant)
 			setNZ(a);
-		else
-			setNZ(tmp & 0xff);
 	}
 };
 
 enum sbc =
 q{
-	ubyte operand = @r;
-	ubyte arg = cast(ubyte) ~operand;
-	ubyte oa = a;
-	uint tmp = oa + arg + cflag;
-	ubyte bin = tmp & 0xff;
+	const ubyte operand = @r;
+	const ubyte oa = a;
+	const bool carryIn = cflag;
+	const uint tmp = oa + cast(ubyte) ~operand + carryIn;
+	const ubyte bin = tmp & 0xff;
 	setNZ(bin);
-	vflag = (~(arg ^ oa) & (oa ^ bin) & 0x80) != 0;
+	vflag = ((oa ^ operand) & (oa ^ bin) & 0x80) != 0;
+	cflag = tmp >= 0x100;
 	if (!dflag)
 		a = bin;
 	else
 	{
-		int al = (oa & 0x0f) - (operand & 0x0f) + cflag - 1;
-		if (al < 0)
-			al = ((al - 0x06) & 0x0f) - 0x10;
-		int res = (oa & 0xf0) - (operand & 0xf0) + al;
-		if (res < 0)
-			res -= 0x60;
-		a = cast(ubyte) res;
+		int al = (oa & 0x0f) - (operand & 0x0f) + carryIn - 1;
 		static if (isCmos!cpuVariant)
-			setNZ(a);
+		{
+			int res = oa - operand + carryIn - 1;
+			if (res < 0)
+				res -= 0x60;
+			if (al < 0)
+				res -= 0x06;
+			setNZ(a = cast(ubyte) res);
+		}
+		else
+		{
+			if (al < 0)
+				al = ((al - 0x06) & 0x0f) - 0x10;
+			int res = (oa & 0xf0) - (operand & 0xf0) + al;
+			if (res < 0)
+				res -= 0x60;
+			a = cast(ubyte) res;
+		}
 	}
-	cflag = tmp >= 0x100;
 };
 
 enum cmp = q{ ubyte tmp = ld(addr); setNZ(a - tmp); cflag = a >= tmp; };
@@ -287,7 +293,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 
 	ushort dpeek(uint addr)
 	{
-		return makeWord(memory[addr + 1], memory[addr]);
+		return makeWord(memory[(addr + 1) & 0xffff], memory[addr]);
 	}
 
 	void push(uint b)
@@ -499,10 +505,10 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 			case 0x1d: doAbsolute!ora(x); break;
 			case 0x1e: doAbsolute!asl(x); break;
 			case 0x20:
-				push((pc + 2) >> 8);
-				push((pc + 2) & 0xff);
-				pc = fetchWord();
-				--pc;
+				const lo = fetchByte();
+				push((pc + 1) >> 8);
+				push((pc + 1) & 0xff);
+				pc = cast(ushort) (makeWord(fetchByte(), lo) - 1);
 				break;
 			case 0x21: doIndirectX!and(); break;
 			case 0x24: doAbsoluteZP!bit(); break;
@@ -564,10 +570,19 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 			case 0x68: setNZ(a = pop()); break;
 			case 0x69: doImmediate!adc(); break;
 			case 0x6a: doAccumulator!ror(); break;
-			case 0x6c:
-				ushort ad = fetchWord();
-				pc = dpeek(ad);
-				--pc;
+			case 0x6c: {
+					const ptr = fetchWord();
+					const wrapped =
+						cast(ushort) ((ptr & 0xff00) | ((ptr + 1) & 0xff));
+					const lo = ld(ptr);
+					static if (isCmos!cpuVariant)
+					{
+						pc = cast(ushort) (makeWord(
+							ld(cast(ushort) (ptr + 1)), lo) - 1);
+					}
+					else
+						pc = cast(ushort) (makeWord(ld(wrapped), lo) - 1);
+				}
 				break;
 			case 0x6d: doAbsolute!adc(); break;
 			case 0x6e: doAbsolute!ror(); break;
@@ -701,13 +716,12 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 				else
 				{
 			case 0x07 + n * 0x10:
-			case 0x87 + n * 0x10:
+			case 0x87 + n * 0x10: fetchByte(); break dispatch;
 			case 0x0f + n * 0x10:
-			case 0x8f + n * 0x10: break dispatch;
+			case 0x8f + n * 0x10: fetchByte(); fetchByte(); break dispatch;
 				}
 			}
 			case 0xcb: // TODO: interrupts
-			case 0xdb:
 				static if (hasWaiStp!cpuVariant)
 				{
 					stopped = true;
@@ -716,6 +730,18 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 				}
 				else
 					break;
+			case 0xdb:
+				static if (hasWaiStp!cpuVariant)
+				{
+					stopped = true;
+					observer.endInstruction();
+					return;
+				}
+				else
+				{
+					fetchByte();
+					break;
+				}
 			case 0x03: case 0x13: case 0x23: case 0x33:
 			case 0x43: case 0x53: case 0x63: case 0x73:
 			case 0x83: case 0x93: case 0xa3: case 0xb3:
@@ -810,87 +836,86 @@ unittest
 	}}
 }
 
-private version(unittest) {
+private version(unittest):
 
-	// TODO: build tests from source and extract the values from there
-	enum ushort entryPoint = 0x0400;
-	enum ushort testCaseVar = 0x0200;
+// TODO: build tests from source and extract the values from there
+enum ushort entryPoint = 0x0400;
+enum ushort testCaseVar = 0x0200;
 
-	enum long instructionsChunk = 1_000_000;
-	enum long instructionsLimit = 500_000_000;
+enum long instructionsChunk = 1_000_000;
+enum long instructionsLimit = 500_000_000;
 
-	bool isStuckSelfLoop(E)(E emu, ushort address)
-	{
-		const opcode = emu.ld(address);
-		if (opcode == 0x4c)                                  // jmp *
-			return emu.dpeek(address + 1) == address;
-		if (emu.ld(cast(ushort) (address + 1)) != 0xfe)      // not a branch to self
-			return false;
-		switch (opcode)
-		{
-		case 0x10: return !emu.nflag; // bpl
-		case 0x30: return emu.nflag;  // bmi
-		case 0x50: return !emu.vflag; // bvc
-		case 0x70: return emu.vflag;  // bvs
-		case 0x90: return !emu.cflag; // bcc
-		case 0xb0: return emu.cflag;  // bcs
-		case 0xd0: return !emu.zflag; // bne
-		case 0xf0: return emu.zflag;  // beq
-		case 0x80: return true;       // bra (65C02)
-		default:   return false;
-		}
-	}
-
-	ushort runToSelfLoop(E)(E emu, immutable(ubyte)[] image)
-	{
-		foreach (i, b; image)
-			emu.st(cast(ushort) i, b);
-		emu.sp = 0xff;
-		emu.pc = entryPoint;
-		emu.instructions = 0;
-		emu.stopOnEmptyStackRts = false;
-
-		bool started;
-		while (emu.instructions < instructionsLimit)
-		{
-			emu.instructionLimit = emu.instructions + instructionsChunk;
-			if (started)
-				emu.resume();
-			else
-			{
-				emu.run();
-				started = true;
-			}
-			foreach (ushort candidate; [cast(ushort) (emu.pc + 1), emu.pc])
-				if (emu.isStuckSelfLoop(candidate))
-					return candidate;
-		}
-		throw new Exception(format(
-			"did not settle within %d instructions (pc=$%04X, test_case=%d)",
-			instructionsLimit, emu.pc, emu.ld(testCaseVar)));
-	}
-
-	bool check(E)(E emu, string what, immutable(ubyte)[] image,
-		ushort successAddress)
-	{
-		writef("%-34s ", what ~ ":");
-		stdout.flush();
-		try
-		{
-			const trap = runToSelfLoop(emu, image);
-			if (trap == successAddress)
-			{
-				writefln("PASS (success trap $%04X, %d instructions)", trap, emu.instructions);
-				return true;
-			}
-			writefln("FAIL: stopped at $%04X, expected $%04X, test_case=%d",
-				trap, successAddress, emu.ld(testCaseVar));
-			writeln("       look the address up in the suite's .lst to identify the check");
-		}
-		catch (Exception e)
-			writefln("FAIL: %s", e.msg);
+bool isStuckSelfLoop(E)(E emu, ushort address)
+{
+	const opcode = emu.ld(address);
+	if (opcode == 0x4c)                                  // jmp *
+		return emu.dpeek(address + 1) == address;
+	if (emu.ld(cast(ushort) (address + 1)) != 0xfe)      // not a branch to self
 		return false;
+	switch (opcode)
+	{
+	case 0x10: return !emu.nflag; // bpl
+	case 0x30: return emu.nflag;  // bmi
+	case 0x50: return !emu.vflag; // bvc
+	case 0x70: return emu.vflag;  // bvs
+	case 0x90: return !emu.cflag; // bcc
+	case 0xb0: return emu.cflag;  // bcs
+	case 0xd0: return !emu.zflag; // bne
+	case 0xf0: return emu.zflag;  // beq
+	case 0x80: return true;       // bra (65C02)
+	default:   return false;
 	}
+}
+
+ushort runToSelfLoop(E)(E emu, immutable(ubyte)[] image)
+{
+	foreach (i, b; image)
+		emu.st(cast(ushort) i, b);
+	emu.sp = 0xff;
+	emu.pc = entryPoint;
+	emu.instructions = 0;
+	emu.stopOnEmptyStackRts = false;
+
+	bool started;
+	while (emu.instructions < instructionsLimit)
+	{
+		emu.instructionLimit = emu.instructions + instructionsChunk;
+		if (started)
+			emu.resume();
+		else
+		{
+			emu.run();
+			started = true;
+		}
+		foreach (ushort candidate; [cast(ushort) (emu.pc + 1), emu.pc])
+			if (emu.isStuckSelfLoop(candidate))
+				return candidate;
+	}
+	throw new Exception(format(
+		"did not settle within %d instructions (pc=$%04X, test_case=%d)",
+		instructionsLimit, emu.pc, emu.ld(testCaseVar)));
+}
+
+bool check(E)(E emu, string what, immutable(ubyte)[] image,
+	ushort successAddress)
+{
+	writef("%-34s ", what ~ ":");
+	stdout.flush();
+	try
+	{
+		const trap = runToSelfLoop(emu, image);
+		if (trap == successAddress)
+		{
+			writefln("PASS (success trap $%04X, %d instructions)", trap, emu.instructions);
+			return true;
+		}
+		writefln("FAIL: stopped at $%04X, expected $%04X, test_case=%d",
+			trap, successAddress, emu.ld(testCaseVar));
+		writeln("       look the address up in the suite's .lst to identify the check");
+	}
+	catch (Exception e)
+		writefln("FAIL: %s", e.msg);
+	return false;
 }
 
 unittest
@@ -917,4 +942,103 @@ unittest
 
 	writeln(ok ? "all CPU tests passed" : "CPU TESTS FAILED");
 	assert(ok);
+}
+
+struct State
+{
+	ushort pc;
+	ubyte sp, a, x, y, p;
+
+	void toString(W)(scope W writer) const
+	{
+		writer.formattedWrite!"pc=%04x s=%02x a=%02x x=%02x y=%02x p=%02x"(
+			pc, sp, a, x, y, p);
+	}
+}
+
+void checkInstruction(CpuVariant v)(State initial, const(int[2])[] ram,
+	State expected, const(int[2])[] changed,
+	string file = __FILE__, size_t line = __LINE__)
+{
+	import std.algorithm : joiner;
+	import std.array : join, split;
+
+	assert((expected.p & 0x10) == 0);
+
+	auto emu = new Emulator!(v, NoObserver)();
+	emu.stopOnEmptyStackRts = false;
+
+	ubyte[ushort] want;
+	foreach (cell; ram)
+	{
+		emu.ram[cell[0]] = cast(ubyte) cell[1];
+		want[cast(ushort) cell[0]] = cast(ubyte) cell[1];
+	}
+	foreach (cell; changed)
+		want[cast(ushort) cell[0]] = cast(ubyte) cell[1];
+
+	emu.pc = initial.pc;
+	emu.sp = initial.sp;
+	emu.a = initial.a;
+	emu.x = initial.x;
+	emu.y = initial.y;
+	emu.p = initial.p;
+	emu.instructionLimit = 1;
+
+	const opcode = emu.ram[initial.pc];
+	emu.run();
+
+	const where = format("%s(%d): %s $%02x", file, line, v, opcode);
+	const got = State(cast(ushort) (emu.pc + 1), emu.sp, emu.a, emu.x, emu.y, emu.p);
+
+	assert(got == expected, format("%s: state\n  got      %s\n  expected %s", where, got, expected));
+	foreach (addr, value; want)
+		assert(emu.ram[addr] == value, format("%s: $%04x is $%02x, expected $%02x",
+			where, addr, emu.ram[addr], value));
+}
+
+unittest
+{
+	debug writeln("unittest emu singlestep");
+
+	// mos_6502, opcode $20: "20 55 13"
+	checkInstruction!(CpuVariant.mos_6502)(
+		State(0x017b, 0x7d, 0x9e, 0x89, 0x34, 0xe6), [[0x017b, 0x20], [0x017c, 0x55], [0x017d, 0x13], [0x0155, 0xad]],
+		State(0x0155, 0x7b, 0x9e, 0x89, 0x34, 0xe6), [[0x017c, 0x7d], [0x017d, 0x01]]);
+
+	// mos_6502, opcode $61: "61 91 cd"
+	checkInstruction!(CpuVariant.mos_6502)(
+		State(0xf372, 0x4c, 0xb3, 0x50, 0xd1, 0x6b), [[0xf372, 0x61], [0xf373, 0x91], [0xf374, 0xcd], [0x0091, 0xdc], [0x00e1, 0x1d], [0x00e2, 0x2c], [0x2c1d, 0x46]],
+		State(0xf374, 0x4c, 0x60, 0x50, 0xd1, 0x29), []);
+
+	// mos_6502, opcode $6c: "6c ff 70"
+	checkInstruction!(CpuVariant.mos_6502)(
+		State(0x2887, 0x47, 0x23, 0x66, 0xb2, 0x24), [[0x2887, 0x6c], [0x2888, 0xff], [0x2889, 0x70], [0x70ff, 0x9d], [0x7000, 0x98], [0x989d, 0x23]],
+		State(0x989d, 0x47, 0x23, 0x66, 0xb2, 0x24), []);
+
+	// wdc_65c02, opcode $07: "07 28 a5"
+	checkInstruction!(CpuVariant.wdc_65c02)(
+		State(0x2f7b, 0x32, 0x42, 0x71, 0x5d, 0x2f), [[0x2f7b, 0x07], [0x2f7c, 0x28], [0x2f7d, 0xa5], [0x0028, 0xba]],
+		State(0x2f7d, 0x32, 0x42, 0x71, 0x5d, 0x2f), []);
+
+	// wdc_65c02, opcode $0f: "0f 7c f5"
+	checkInstruction!(CpuVariant.wdc_65c02)(
+		State(0x8da5, 0x9c, 0x88, 0x57, 0x65, 0xe8), [[0x8da5, 0x0f], [0x8da6, 0x7c], [0x8da7, 0xf5], [0x8da8, 0xe1]],
+		State(0x8da8, 0x9c, 0x88, 0x57, 0x65, 0xe8), []);
+
+	// wdc_65c02, opcode $cb: "cb 4a 20"
+	checkInstruction!(CpuVariant.wdc_65c02)(
+		State(0x7487, 0x15, 0xd2, 0xf9, 0x06, 0x22), [[0x7487, 0xcb], [0x7488, 0x4a], [0x7489, 0x20]],
+		State(0x7488, 0x15, 0xd2, 0xf9, 0x06, 0x22), []);
+
+	// wdc_65c02, opcode $db: "db cf 42"
+	checkInstruction!(CpuVariant.wdc_65c02)(
+		State(0x6aeb, 0x6f, 0x61, 0x9e, 0xd5, 0x27), [[0x6aeb, 0xdb], [0x6aec, 0xcf], [0x6aed, 0x42], [0x00cf, 0x8b], [0x006d, 0x85]],
+		State(0x6aed, 0x6f, 0x61, 0x9e, 0xd5, 0x27), []);
+
+	// wdc_65c02, opcode $f1: "f1 3"
+	checkInstruction!(CpuVariant.wdc_65c02)(
+		State(0x73e6, 0x45, 0xf3, 0xfc, 0x7e, 0xe8), [[0x00ff, 0x15], [0x1638, 0x1f], [0x00fe, 0xba], [0x73e7, 0xfe], [0x73e6, 0xf1]],
+		State(0x73e8, 0x45, 0xcd, 0xfc, 0x7e, 0xa9), []);
+
 }

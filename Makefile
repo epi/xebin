@@ -51,7 +51,9 @@ test:
 	dub test
 
 singlestep:
-	dub run -b release :singlestep -- -o 00,08,28,40
+	dub run -b release :singlestep -- -c 6502 -u
+	dub run -b release :singlestep -- -c synertek65c02,rockwell65c02,wdc65c02
+
 
 .PHONY: all doc debug dist windist srcdist clean install test
 
