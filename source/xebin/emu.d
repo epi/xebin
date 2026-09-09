@@ -1,19 +1,17 @@
 module xebin.emu;
 
-import std.stdio;
-import std.exception;
-import std.bitmanip;
 import std.string;
-import std.array;
-import std.algorithm;
-import std.format : formattedWrite;
 
-import xebin.binary;
-import xebin.disasm;
+version(unittest) import std.stdio;
 
-ushort makeWord(uint b1, uint b0)
+private ushort makeWord(uint b1, uint b0)
 {
 	return cast(ushort) ((b1 << 8) | b0);
+}
+
+string substOperand(string expr, string read, string writeOpen)
+{
+	return expr.replace("@w(", writeOpen).replace("@r", read);
 }
 
 enum adc =
@@ -54,7 +52,7 @@ q{
 
 enum sbc =
 q{
-	ubyte operand = @;
+	ubyte operand = @r;
 	ubyte arg = cast(ubyte) ~operand;
 	ubyte oa = a;
 	uint tmp = oa + arg + cflag;
@@ -89,36 +87,49 @@ enum and = q{ setNZ(a &= ld(addr)); };
 enum eor = q{ setNZ(a ^= ld(addr)); };
 enum inc = q{ setNZ(st(addr, ld(addr) + 1)); };
 enum dec = q{ setNZ(st(addr, ld(addr) - 1)); };
-enum asl = q{ ubyte tmp = @; cflag = (tmp & 0x80) != 0; tmp <<= 1; setNZ(@ = tmp); };
+enum asl =
+q{
+	ubyte tmp = @r;
+	cflag = (tmp & 0x80) != 0;
+	tmp <<= 1;
+	setNZ(tmp);
+	@w(tmp);
+};
 enum rol =
 q{
-	ubyte tmp = @;
+	ubyte tmp = @r;
 	bool nc = (tmp & 0x80) != 0;
 	tmp = cast(ubyte) ((tmp << 1) | cflag);
 	cflag = nc;
-	setNZ(@ = tmp);
+	setNZ(tmp);
+	@w(tmp);
 };
 enum lsr =
 q{
-	cflag = @ & 1;
-	setNZ(@ >>>= 1);
+	ubyte tmp = @r;
+	cflag = (tmp & 1) != 0;
+	tmp >>>= 1;
+	setNZ(tmp);
+	@w(tmp);
 };
 enum ror =
 q{
-	ubyte tmp = @;
-	bool nc = tmp & 1;
-	setNZ(@ = cast(ubyte) ((tmp >>> 1) | (cflag ? 0x80 : 0)));
+	ubyte tmp = @r;
+	bool nc = (tmp & 1) != 0;
+	tmp = cast(ubyte) ((tmp >>> 1) | (cflag ? 0x80 : 0));
 	cflag = nc;
+	setNZ(tmp);
+	@w(tmp);
 };
 enum bit =
 q{
-	zflag = (a & @) == 0;
-	nflag = (@ & 0x80) != 0;
-	vflag = (@ & 0x40) != 0;
+	ubyte tmp = @r;
+	zflag = (a & tmp) == 0;
+	nflag = (tmp & 0x80) != 0;
+	vflag = (tmp & 0x40) != 0;
 };
-enum tsb = q{ zflag = (a & @) == 0; @ = cast(ubyte) (@ | a); };
-enum trb = q{ zflag = (a & @) == 0; @ = cast(ubyte) (@ & ~a); };
-
+enum tsb = q{ ubyte tmp = @r; zflag = (a & tmp) == 0; @w(cast(ubyte) (tmp | a)); };
+enum trb = q{ ubyte tmp = @r; zflag = (a & tmp) == 0; @w(cast(ubyte) (tmp & ~a)); };
 
 ///
 enum CpuVariant {
@@ -139,15 +150,67 @@ enum bool hasBitOps(CpuVariant v) =
 /// WAI and STP, added by the W65C02S; NOPs everywhere else.
 enum bool hasWaiStp(CpuVariant v) = v == CpuVariant.wdc_w65c02s;
 
-///
-class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
+/// Observer policy interface with no-op implementation.
+struct NoObserver
 {
+	/// Called after the opcode is fetched, with pc still on the opcode.
+	void instruction(E)(E emu) {}
+	void fetch(ushort addr, ubyte value) {} /// Opcode or operand read via pc.
+	void read(ushort addr, ubyte value) {}  /// Data read; from `ld`.
+	void write(ushort addr, ubyte value) {} /// Data write; from `st`.
+	void idle(ushort addr) {}               /// A cycle that carries no operand.
+	/// Called once the instruction is done, to emit whatever accumulated.
+	void endInstruction() {}
+}
+
+/// Forward every hook to all contained observers.
+struct Compose(Observers...)
+{
+	Observers observers;
+
+	/// The `n`th composed observer, for configuring or reading it back.
+	ref auto get(size_t n)() { return observers[n]; }
+
+	void instruction(E)(E emu) { foreach (ref o; observers) o.instruction(emu); }
+	void fetch(ushort addr, ubyte value) { foreach (ref o; observers) o.fetch(addr, value); }
+	void read(ushort addr, ubyte value) { foreach (ref o; observers) o.read(addr, value); }
+	void write(ushort addr, ubyte value) { foreach (ref o; observers) o.write(addr, value); }
+	void idle(ushort addr) { foreach (ref o; observers) o.idle(addr); }
+	void endInstruction() { foreach (ref o; observers) o.endInstruction(); }
+}
+
+/// Counts every bus access as the same number of ticks.
+struct UniformTicks
+{
+	long ticks;             /// Elapsed ticks.
+	int ticksPerAccess = 1; /// Or 5 for Lynx nominal (no same-page optimization).
+
+	void instruction(E)(E emu) {}
+	void fetch(ushort addr, ubyte value) { ticks += ticksPerAccess; }
+	void read(ushort addr, ubyte value) { ticks += ticksPerAccess; }
+	void write(ushort addr, ubyte value) { ticks += ticksPerAccess; }
+	void idle(ushort addr) { ticks += ticksPerAccess; }
+	void endInstruction() {}
+}
+
+///
+class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserver)
+{
+	/// Observer policy instance; configure it before running.
+	Observer observer;
+
 	private ubyte[] memory;
 	private void delegate()[ubyte] traps;
-	private File[7] iocbs;
 
 	long instructions;
 	long instructionLimit = -1;
+
+	void installTrap(ubyte selector, void delegate() handler)
+	{
+		traps[selector] = handler;
+	}
+
+	@property ubyte[] ram() { return memory; }
 
 	bool stopOnEmptyStackRts = true;
 
@@ -182,155 +245,107 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 		return makeWord(memory[addr + 1], memory[addr]);
 	}
 
-	void loadAndRun(BinaryBlock[] blocks)
-	{
-		sp = 0xff;
-		dpoke(0x2e7, 0x706);
-		dpoke(0x2e5, 0xbc1f);
-		dpoke(0xa, 0x700);
-
-		memory[0x0700] = 0x02;
-		memory[0x0701] = 0x00;
-		traps[0] =
-		{
-			import core.stdc.stdlib : exit;
-			exit(0);
-		};
-
-		memory[0xe456] = 0x02;
-		memory[0xe457] = 0x01;
-		memory[0xe458] = 0x60;
-		traps[1] = &cio;
-
-		memory[0xfff8] = 0x02; // host escape
-		memory[0xfff9] = 0x02;
-		memory[0xfffa] = 0xf8; // nmi vector
-		memory[0xfffb] = 0xff;
-		memory[0xfffe] = 0xf8; // irq/brk vector
-		memory[0xffff] = 0xff;
-		traps[2] =
-		{
-			pop();                                   // P
-			ushort baddr = pop();                    // return address, low byte first
-			baddr |= cast(ushort) (pop() << 8);
-			baddr -= 2;                              // back up over BRK + signature
-			throw new Exception(format("BRK at %04X", baddr));
-		};
-
-		memory[0x0340] = 0;
-		for (uint ad = 0x0340 + 0x10; ad < 0x340 + 0x80; ++ad)
-			memory[ad] = 255;
-
-		foreach (block; blocks)
-		{
-			if (cpuTrace)
-			{
-				writefln("Load %d bytes at %04X-%04X", block.length,
-					block.addr, block.end);
-			}
-			memory[block.addr .. block.addr + block.length] = block.data[];
-			if (block.isInit)
-			{
-				if (cpuTrace)
-					writefln("Init at %04x", block.initAddress);
-				jsr(block.initAddress);
-			}
-		}
-		if (ushort runaddr = dpeek(0x2e0))
-		{
-			if (cpuTrace)
-				writefln("Run at %04X", runaddr);
-			jsr(runaddr);
-		}
-	}
-
 	void push(uint b)
 	{
-		memory[0x100 + sp--] = cast(ubyte) b;
+		const addr = cast(ushort) (0x100 + sp--);
+		memory[addr] = cast(ubyte) b;
+		observer.write(addr, cast(ubyte) b);
 	}
 
 	ubyte pop()
 	{
-		return memory[0x100 + ++sp];
+		const addr = cast(ushort) (0x100 + ++sp);
+		observer.read(addr, memory[addr]);
+		return memory[addr];
 	}
 
 	ubyte fetchByte()
 	{
-		return memory[++pc];
+		++pc;
+		observer.fetch(pc, memory[pc]);
+		return memory[pc];
 	}
 
 	ushort fetchWord()
 	{
-		pc += 2;
-		ushort result = makeWord(memory[pc], memory[pc - 1]);
-		return result;
+		const lo = fetchByte();
+		const hi = fetchByte();
+		return makeWord(hi, lo);
+	}
+
+	private ushort readWord(ushort addr, ushort hiAddr)
+	{
+		const lo = ld(addr);
+		const hi = ld(hiAddr);
+		return makeWord(hi, lo);
 	}
 
 	void doAccumulator(string expr)()
 	{
-		mixin(replace(expr, "@", "a"));
+		mixin(substOperand(expr, "a", "a = ("));
 	}
 
 	void doImmediate(string expr)()
 	{
 		++pc;
 		alias pc addr;
-		mixin(replace(expr, "@", "memory[pc]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doAbsolute(string expr)(ubyte index = 0)
 	{
 		ushort addr = fetchWord();
 		addr += index;
-		mixin(replace(expr, "@", "memory[addr]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doAbsoluteZP(string expr)(ubyte index = 0)
 	{
 		ubyte addr = fetchByte();
 		addr += index;
-		mixin(replace(expr, "@", "memory[addr]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doIndirectY(string expr)()
 	{
-		ushort addr = fetchByte();
-		addr = makeWord(memory[(addr + 1) & 0xff], memory[addr]);
+		const ushort zp = fetchByte();
+		ushort addr = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
 		addr += y;
-		mixin(replace(expr, "@", "memory[addr]"));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	void doIndirectX(string expr)()
 	{
-		ushort addr = fetchByte();
-		addr += x;
-		addr = makeWord(memory[(addr + 1) & 0xff], memory[addr & 0xff]);
-		mixin(replace(expr, "@", "memory[addr]"));
+		ushort zp = fetchByte();
+		zp = (zp + x) & 0xff;
+		const addr = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	static if (isCmos!cpuVariant)
 	void doIndirectZP(string expr)()
 	{
-		ushort zp = fetchByte();
-		ushort addr = makeWord(memory[(zp + 1) & 0xff], memory[zp]);
-		mixin(replace(expr, "@", "memory[addr]"));
+		const ushort zp = fetchByte();
+		const addr = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
+		mixin(substOperand(expr, "ld(addr)", "st(addr, "));
 	}
 
 	static if (isCmos!cpuVariant)
 	void doBitSetReset(ubyte mask, bool set)()
 	{
 		const ubyte addr = fetchByte();
+		const ubyte value = ld(addr);
 		static if (set)
-			memory[addr] |= mask;
+			st(addr, value | mask);
 		else
-			memory[addr] &= cast(ubyte) ~mask;
+			st(addr, value & ~mask);
 	}
 
 	static if (hasBitOps!cpuVariant)
 	void doBitBranch(ubyte mask, bool branchIfSet)()
 	{
 		const ubyte zp = fetchByte();
-		const bool isSet = (memory[zp] & mask) != 0;
+		const bool isSet = (ld(zp) & mask) != 0;
 		const byte offs = fetchByte();
 		if (isSet == branchIfSet)
 			pc = cast(ushort) (pc + offs);
@@ -341,14 +356,13 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 		byte offs = fetchByte();
 		if (mixin(pred))
 		{
-			ushort oldpc = pc;
 			pc++;
 			pc += offs;
 			pc--;
 		}
 	}
 
-	private void setNZ(uint res)
+	void setNZ(uint res)
 	{
 		zflag = res == 0;
 		nflag = (res & 0x80) != 0;
@@ -356,179 +370,15 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 
 	ubyte ld(ushort addr)
 	{
-		if (cpuTrace)
-		{
-			alignToColumn(64);
-			info.formattedWrite("R %04X %02X  ", addr, memory[addr]);
-		}
+		observer.read(addr, memory[addr]);
 		return memory[addr];
 	}
 
 	ubyte st(ushort addr, uint val)
 	{
 		memory[addr] = cast(ubyte) val;
-		if (cpuTrace)
-		{
-			alignToColumn(64);
-			info.formattedWrite("W %04X %02X", addr, memory[addr]);
-		}
+		observer.write(addr, memory[addr]);
 		return cast(ubyte) val;
-	}
-
-	void consoleIO(uint cmd, uint addr, uint len)
-	{
-		if (ioTrace)
-			writeln();
-		switch (cmd)
-		{
-		case 5:
-			const s = readln().representation;
-			const l = min(len, s.length);
-			foreach (ubyte ch; s[0 .. l])
-				memory[addr++] = (ch == '\n') ? 0x9b : ch;
-			dpoke(0x348, l);
-			break;
-		case 9:
-			if (!len)
-				len = 1;
-			foreach (ubyte ch; memory[addr .. addr + len])
-			{
-				if (ch == 0x9b)
-				{
-					putchar('\n');
-					break;
-				}
-				else
-					putchar(ch);
-			}
-			break;
-		case 11:
-			if (!len)
-				putchar(a == 0x9b ? '\n' : a);
-			else
-			{
-				foreach (ubyte ch; memory[addr .. addr + len])
-					putchar(ch == 0x9b ? '\n' : ch);
-			}
-			break;
-		default:
-			setNZ(y = 132);
-		}
-	}
-
-	void cio()
-	{
-		setNZ(y = 1);
-		uint iocb = x;
-		uint cmd = memory[0x342 + x];
-		uint addr = dpeek(0x344 + x);
-		uint len = dpeek(0x348 + x);
-		uint aux1 = memory[0x34a + x];
-		uint aux2 = memory[0x34b + x];
-		if (ioTrace)
-			stderr.writef(
-				"CIO #%02x cmd=%02x addr=%04x len=%04x aux1=%02x aux2=%02x",
-				iocb, cmd, addr, len, aux1, aux2);
-		if (iocb == 0)
-			consoleIO(cmd, addr, len);
-		else
-		{
-			if (iocb & 0x8f)
-			{
-				setNZ(y = 134);
-				return;
-			}
-			iocb >>>= 4;
-			iocb -= 1;
-			scope (exit)
-			if (ioTrace)
-				stderr.writefln("   result=%3d len=%04x",
-					y, dpeek(0x358 + iocb * 16));
-			switch (cmd)
-			{
-			case 3:
-				if (memory[0x350 + iocb * 16] != 255)
-				{
-					setNZ(y = 129);
-					return;
-				}
-				char[] name;
-				foreach (ch; memory[addr .. $])
-				{
-					if (ch == 0x9b || !ch)
-						break;
-					name ~= ch;
-				}
-				if (ioTrace)
-					writefln(`OPEN #%d,%d,%d,"%s"`, iocb + 1, aux1, aux2, name);
-				if (name[0] != 'D')
-				{
-					setNZ(y = 130);
-					return;
-				}
-				string mode;
-				switch (aux1)
-				{
-				case 4: mode = "r"; break;
-				case 8: mode = "w"; break;
-				case 12: mode = "r+"; break;
-				case 9: mode = "a"; break;
-				default:
-					setNZ(y = 132);
-					return;
-				}
-				if (collectException(iocbs[iocb] = File(
-					find(name, ':')[1 .. $].assumeUnique.replace(">", "/"), mode)))
-				{
-					setNZ(y = 170);
-					return;
-				}
-				memory[0x350 + iocb * 16] = 1;
-				break;
-			case 7:
-				size_t res;
-				if (collectException(res = iocbs[iocb].rawRead(
-					memory[addr .. addr + len]).length))
-				{
-					setNZ(y = 144);
-					return;
-				}
-				dpoke(0x358 + iocb * 16, cast(uint) res);
-				if (res < len)
-				{
-					setNZ(y = 136);
-					return;
-				}
-				break;
-			case 11:
-				if (collectException(iocbs[iocb].rawWrite(
-					memory[addr .. addr + len])))
-				{
-					setNZ(y = 144);
-					return;
-				}
-				break;
-			case 12:
-				if (ioTrace)
-					writefln("CLOSE #%d", iocb + 1);
-				iocbs[iocb].close();
-				memory[0x350 + iocb * 16] = 255;
-				break;
-			default:
-				setNZ(y = 132);
-			}
-		}
-	}
-
-	bool cpuTrace = false;
-	bool ioTrace = false;
-	Appender!(char[]) info;
-
-	void alignToColumn(size_t col)
-	{
-		import std.range : repeat, take;
-		if (info.data.length < col)
-			info.put(' '.repeat.take(col - info.data.length));
 	}
 
 	void run()
@@ -548,29 +398,9 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 		{
 			if (instructionLimit >= 0 && instructions >= instructionLimit)
 				return;
-			ubyte instr = fetchByte();
 			++instructions;
-			if (cpuTrace)
-			{
-				info.formattedWrite(
-					"A=%02X X=%02X Y=%02X S=%02X P=%s%s*-%s%s%s%s PC=",
-					a, x, y, sp,
-					nflag ? "N" : "-",
-					vflag ? "V" : "-",
-					dflag ? "D" : "-",
-					iflag ? "I" : "-",
-					zflag ? "Z" : "-",
-					cflag ? "C" : "-", pc);
-
-				ushort addr = pc;
-				info.put(disassembleOne(memory, addr));
-			}
-			scope(exit)
-			if (info.data.length)
-			{
-				stderr.writeln(info.data);
-				info.clear();
-			}
+			ubyte instr = fetchByte();
+			observer.instruction(this);
 
 			dispatch: switch (instr)
 			{
@@ -608,6 +438,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 						{
 							--pc;   // JAM: report the address of the $02 itself
 							stopped = true;
+							observer.endInstruction();
 							return;
 						}
 					}
@@ -712,7 +543,10 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 				ushort ad = pop();
 				ad |= cast(ushort) (pop() << 8);
 				if (stopOnEmptyStackRts && sp == 0xff)
+				{
+					observer.endInstruction();
 					return;
+				}
 				pc = ad;
 				break;
 			case 0x61: doIndirectX!adc(); break;
@@ -823,7 +657,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 			case 0xda: push(x); break;
 			case 0xfa: setNZ(x = pop()); break;
 			case 0x80: doBranch!"true"(); break;
-			case 0x89: ++pc; zflag = (a & memory[pc]) == 0; break; // BIT #imm
+			case 0x89: zflag = (a & fetchByte()) == 0; break;
 			case 0x64: doAbsoluteZP!"st(addr, 0);"(); break;
 			case 0x74: doAbsoluteZP!"st(addr, 0);"(x); break;
 			case 0x9c: doAbsolute!"st(addr, 0);"(); break;
@@ -868,6 +702,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 				static if (hasWaiStp!cpuVariant)
 				{
 					stopped = true;
+					observer.endInstruction();
 					return;
 				}
 				else
@@ -880,18 +715,19 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 			case 0x4b: case 0x5b: case 0x6b: case 0x7b:
 			case 0x8b: case 0x9b: case 0xab: case 0xbb:
 			case 0xeb: case 0xfb:
-				break; // 1-byte NOP
+				break;
 			case 0x22: case 0x42: case 0x62: case 0x82:
 			case 0xc2: case 0xe2: case 0x44: case 0x54:
 			case 0xd4: case 0xf4:
-				++pc; break; // 2-byte NOP
+				fetchByte(); break;
 			case 0x5c: case 0xdc: case 0xfc:
-				pc += 2; break; // 3-byte NOP
+				fetchByte(); fetchByte(); break;
 			}
 			default:
 				throw new Exception(
 					format("Unimplemented instruction %02X", instr));
 			}
+			observer.endInstruction();
 		}
 	}
 
@@ -902,6 +738,68 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502)
 		pc = addr;
 		run();
 	}
+}
+
+unittest
+{
+	debug writeln("unittest host escape");
+
+	static void load(E)(E emu, ushort addr, const(ubyte)[] bytes)
+	{
+		emu.ram[addr .. addr + bytes.length] = bytes;
+		emu.pc = addr;
+	}
+
+	// A registered handler runs, may drive the machine, and execution carries
+	// on after the two-byte escape.
+	{
+		auto emu = new Emulator!();
+		int fired;
+		emu.installTrap(0x37, delegate void() { fired++; emu.a = 0x5a; });
+		load(emu, 0x1000, [ubyte(0x02), 0x37, 0xe8]);   // $02 $37 ; inx
+		emu.instructionLimit = 2;
+		emu.run();
+		assert(fired == 1);
+		assert(emu.a == 0x5a);      // the handler wrote through to the CPU
+		assert(emu.x == 1);         // selector consumed, so inx was next
+		assert(!emu.stopped);
+	}
+
+	// The selector byte picks the handler, and selector 0 is a valid choice.
+	{
+		auto emu = new Emulator!();
+		ubyte[] seen;
+		emu.installTrap(0, delegate void() { seen ~= 0; });
+		emu.installTrap(1, delegate void() { seen ~= 1; });
+		load(emu, 0x1000, [ubyte(0x02), 0x01, 0x02, 0x00]);
+		emu.instructionLimit = 2;
+		emu.run();
+		assert(seen == [1, 0]);
+	}
+
+	// With no handler the escape falls back to what the silicon would do:
+	// NMOS jams, reporting the address of the $02 rather than the selector.
+	{
+		auto emu = new Emulator!(CpuVariant.mos_6502)();
+		load(emu, 0x1000, [ubyte(0x02), 0x37, 0xe8]);
+		emu.instructionLimit = 2;
+		emu.run();
+		assert(emu.stopped);
+		assert(emu.pc == 0x1000);
+		assert(emu.x == 0);         // never got past the jam
+	}
+
+	// ... while the CMOS parts see it as an ordinary two-byte NOP.
+	static foreach (v; [CpuVariant.wdc_65c02, CpuVariant.gte_65sc02,
+		CpuVariant.rockwell_r65c02, CpuVariant.wdc_w65c02s])
+	{{
+		auto emu = new Emulator!v();
+		load(emu, 0x1000, [ubyte(0x02), 0x37, 0xe8]);
+		emu.instructionLimit = 2;
+		emu.run();
+		assert(!emu.stopped, v.stringof);
+		assert(emu.x == 1, v.stringof);   // both bytes skipped, inx ran
+	}}
 }
 
 private version(unittest) {
