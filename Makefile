@@ -51,7 +51,7 @@ test:
 	dub test
 
 singlestep:
-	dub run -b release :singlestep -- -o ea
+	dub run -b release :singlestep -- -o 00,08,28,40
 
 .PHONY: all doc debug dist windist srcdist clean install test
 
