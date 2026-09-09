@@ -30,6 +30,7 @@
 import std.algorithm : canFind, filter, map;
 import std.array : appender;
 import std.conv : to;
+import std.exception : collectExceptionMsg;
 import std.file : exists, read;
 import std.format;
 import std.getopt;
@@ -172,18 +173,88 @@ unittest
 	assert(tests[0].cycles == [Access(59082, 177, false), Access(40, 160, true)]);
 }
 
+struct Trace
+{
+	ubyte[] ram;
+	Access[] accesses;
+
+	void instruction(E)(E emu) {}
+	void fetch(ushort addr, ubyte value) { accesses ~= Access(addr, value, false); }
+	void read(ushort addr, ubyte value) { accesses ~= Access(addr, value, false); }
+	void write(ushort addr, ubyte value) { accesses ~= Access(addr, value, true); }
+	void idle(ushort addr) { accesses ~= Access(addr, ram[addr], false); }
+	void endInstruction() {}
+}
+
+string runOne(E)(E emu, ref const TestCase t)
+{
+	foreach (c; t.initialRam)
+		emu.ram[c.addr] = c.value;
+	emu.pc = t.initial.pc;
+	emu.sp = t.initial.sp;
+	emu.a = t.initial.a;
+	emu.x = t.initial.x;
+	emu.y = t.initial.y;
+	emu.p = t.initial.p;
+	emu.stopped = false;
+	emu.instructions = 0;
+	emu.instructionLimit = 1;
+	emu.observer.accesses.length = 0;
+	emu.observer.accesses.assumeSafeAppend();
+
+	string thrown = collectExceptionMsg(emu.run());
+
+	const got = State(cast(ushort) (emu.pc + 1), emu.sp, emu.a, emu.x, emu.y, emu.p);
+
+	string[] problems;
+	if (thrown.length)
+		problems ~= " threw: " ~ thrown;
+	if (got != t.expected)
+	{
+		problems ~= format(" state: got %s", got);
+		problems ~= format("   expected %s", t.expected);
+	}
+	foreach (c; t.expectedRam)
+	{
+		if (emu.ram[c.addr] != c.value)
+			problems ~= format("memory: $%04x is $%02x, expected $%02x",
+				c.addr, emu.ram[c.addr], c.value);
+	}
+
+	emu.ram[] = 0;
+
+	if (!problems.length)
+		return null;
+	return format("  \"%s\"\n    %-(%s\n    %)", t.name, problems);
+}
+
 struct Result
 {
 	ubyte opcode;
 	size_t total, failed;
+	string[] reports;
 }
 
 Result runOpcode(CpuVariant v)(string path, ubyte opcode)
 {
 	Result r = { opcode: opcode };
+	auto emu = new Emulator!(v, Trace)();
+	emu.observer.ram = emu.ram;
+	emu.stopOnEmptyStackRts = false;
 
-	foreach (ref t; parseTests(cast(string) read(path)))
+	auto text = strip(cast(string) read(path));
+	if (text.length == 0)
+		return r;
+
+	foreach (ref t; parseTests(text))
 	{
+		++r.total;
+		const diag = runOne(emu, t);
+		if (diag !is null) {
+			++r.failed;
+			if (r.reports.length < 5)
+				r.reports ~= diag;
+		}
 	}
 
 	return r;
@@ -214,6 +285,24 @@ size_t runTarget(CpuVariant v)(string dir, const(ubyte)[] opcodes)
 	}
 
 	size_t failed;
+	foreach (ref r; results)
+	{
+		if (r.failed)
+			++failed;
+		if (!r.total)
+		{
+			writefln("  $%02x  no test data", r.opcode);
+			continue;
+		}
+		if (r.failed)
+			writefln("  $%02x  %6d/%-6d %s", r.opcode, r.total - r.failed, r.total,
+				r.failed ? "FAIL "  : "ok");
+		foreach (report; r.reports)
+			writeln(report);
+	}
+	return failed;
+
+
 	return failed;
 }
 
@@ -313,5 +402,5 @@ int main(string[] args)
 	}
 	writefln("%d opcode%s with failures", failed, failed == 1 ? "" : "s");
 
-	return 0;
+	return failed ? 1 : 0;
 }

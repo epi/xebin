@@ -245,11 +245,34 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 	ubyte sp = 0xff;
 	bool nflag;
 	bool vflag;
-	bool bflag;
 	bool dflag;
 	bool iflag;
 	bool zflag;
 	bool cflag;
+
+	///	Flags, `NV1BDIZC`.
+	@property ubyte p() const
+	{
+		return cast(ubyte) (
+			(nflag ? 0x80 : 0) |
+			(vflag ? 0x40 : 0) |
+			0x20 |
+			(dflag ? 0x08 : 0) |
+			(iflag ? 0x04 : 0) |
+			(zflag ? 0x02 : 0) |
+			(cflag ? 0x01 : 0));
+	}
+
+	/// ditto
+	@property void p(ubyte value)
+	{
+		nflag = (value & 0x80) != 0;
+		vflag = (value & 0x40) != 0;
+		dflag = (value & 0x08) != 0;
+		iflag = (value & 0x04) != 0;
+		zflag = (value & 0x02) != 0;
+		cflag = (value & 0x01) != 0;
+	}
 
 	this()
 	{
@@ -429,14 +452,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 			case 0x00:
 				push((pc + 2) >> 8);
 				push((pc + 2) & 0xff);
-				push(
-					(nflag ? 0x80 : 0) |
-					(vflag ? 0x40 : 0) |
-					0x20 | 0x10 |
-					(dflag ? 0x08 : 0) |
-					(iflag ? 0x04 : 0) |
-					(zflag ? 0x02 : 0) |
-					(cflag ? 0x01 : 0));
+				push(p | 0x10);
 				iflag = true;
 				static if (isCmos!cpuVariant)
 					dflag = false;
@@ -469,16 +485,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 			case 0x01: doIndirectX!ora(); break;
 			case 0x05: doAbsoluteZP!ora(); break;
 			case 0x06: doAbsoluteZP!asl(); break;
-			case 0x08:
-				push(
-					(nflag ? 0x80 : 0) |
-					(vflag ? 0x40 : 0) |
-					0x20 | 0x10 |
-					(dflag ? 0x08 : 0) |
-					(iflag ? 0x04 : 0) |
-					(zflag ? 0x02 : 0) |
-					(cflag ? 0x01 : 0));
-				break;
+			case 0x08: push(p | 0x10); break;
 			case 0x09: doImmediate!ora(); break;
 			case 0x0a: doAccumulator!asl(); break;
 			case 0x0d: doAbsolute!ora(); break;
@@ -501,18 +508,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 			case 0x24: doAbsoluteZP!bit(); break;
 			case 0x25: doAbsoluteZP!and(); break;
 			case 0x26: doAbsoluteZP!rol(); break;
-			case 0x28:
-				{
-					auto p = pop();
-					nflag = (p & 0x80) != 0;
-					vflag = (p & 0x40) != 0;
-					bflag = (p & 0x10) != 0;
-					dflag = (p & 0x08) != 0;
-					iflag = (p & 0x04) != 0;
-					zflag = (p & 0x02) != 0;
-					cflag = (p & 0x01) != 0;
-				}
-				break;
+			case 0x28: p = pop(); break;
 			case 0x29: doImmediate!and(); break;
 			case 0x2a: doAccumulator!rol(); break;
 			case 0x2c: doAbsolute!bit(); break;
@@ -527,16 +523,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 			case 0x3d: doAbsolute!and(x); break;
 			case 0x3e: doAbsolute!rol(x); break;
 			case 0x40:
-				{
-					auto p = pop();
-					nflag = (p & 0x80) != 0;
-					vflag = (p & 0x40) != 0;
-					bflag = (p & 0x10) != 0;
-					dflag = (p & 0x08) != 0;
-					iflag = (p & 0x04) != 0;
-					zflag = (p & 0x02) != 0;
-					cflag = (p & 0x01) != 0;
-				}
+				p = pop();
 				ushort rti = pop();
 				rti |= cast(ushort) (pop() << 8);
 				pc = cast(ushort) (rti - 1);
