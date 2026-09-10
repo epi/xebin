@@ -36,6 +36,8 @@ private ushort makeWord(uint b1, uint b0)
 	return cast(ushort) ((b1 << 8) | b0);
 }
 
+private:
+
 enum bool readsOperand(string expr) = expr.indexOf("@r") >= 0;
 enum bool writesOperand(string expr) = expr.indexOf("@w(") >= 0;
 enum indexAlways = "@i;";
@@ -241,6 +243,8 @@ enum ane = q{ setNZ(a = (a | magicConstant) & x & @r); };
 enum laxImmediate = q{ setNZ(a = x = (a | magicConstant) & @r); };
 enum las = q{ setNZ(a = x = (sp &= @r)); };
 
+public:
+
 ///
 enum CpuVariant {
 	mos_6502,        /// NMOS
@@ -395,14 +399,14 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 		return memory[addr];
 	}
 
-	ubyte fetchByte()
+	private ubyte fetchByte()
 	{
 		++pc;
 		observer.fetch(pc, memory[pc]);
 		return memory[pc];
 	}
 
-	ushort fetchWord()
+	private ushort fetchWord()
 	{
 		const lo = fetchByte();
 		const hi = fetchByte();
@@ -470,13 +474,13 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 
 	private static void noModify(ubyte value) {}
 
-	void doAccumulator(string expr)()
+	private void doAccumulator(string expr)()
 	{
 		idleFetch();
 		mixin(substOperand(expr, "a", "a = (", "noModify(", ""));
 	}
 
-	void doImmediate(string expr)()
+	private void doImmediate(string expr)()
 	{
 		static assert(!writesOperand!expr);
 		mixin(substOperand(expr, "fetchByte()", "", "noModify(", "idleFetch()"));
@@ -539,16 +543,16 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 		mixin(substOperand(expr, "ld(addr)", "st(addr, ", "modifyCycle(addr, ", "idleRead(addr)"));
 	}
 
-	void doIndirectY(string expr)()
+	private void doIndirectY(string expr)()
 	{
- 		const ushort zp = fetchByte();
+		const ushort zp = fetchByte();
 		const base = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
 		indexPenalty!expr(base, y);
 		const addr = cast(ushort) (base + y);
 		mixin(substOperand(expr, "ld(addr)", "st(addr, ", "modifyCycle(addr, ", "idleRead(addr)"));
 	}
 
-	void doIndirectX(string expr)()
+	private void doIndirectX(string expr)()
 	{
 		const ushort zp = fetchByte();
 		idleRead(zp);
@@ -558,7 +562,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 	}
 
 	static if (isCmos!cpuVariant)
-	void doIndirectZP(string expr)()
+	private void doIndirectZP(string expr)()
 	{
 		const ushort zp = fetchByte();
 		const addr = readWord(zp, cast(ushort) ((zp + 1) & 0xff));
@@ -566,7 +570,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 	}
 
 	static if (isCmos!cpuVariant)
-	void doBitSetReset(ubyte mask, bool set)()
+	private void doBitSetReset(ubyte mask, bool set)()
 	{
 		const ubyte addr = fetchByte();
 		const ubyte value = ld(addr);
@@ -578,7 +582,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 	}
 
 	static if (hasBitOps!cpuVariant)
-	void doBitBranch(ubyte mask, bool branchIfSet)()
+	private void doBitBranch(ubyte mask, bool branchIfSet)()
 	{
 		const ubyte zp = fetchByte();
 		const bool isSet = (ld(zp) & mask) != 0;
@@ -594,7 +598,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 		pc = cast(ushort) (target - 1);
 	}
 
-	void doBranch(string pred)()
+	private void doBranch(string pred)()
 	{
 		byte offs = fetchByte();
 		if (!mixin(pred))
