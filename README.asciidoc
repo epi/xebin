@@ -164,16 +164,19 @@ Running binary file
 ~~~~~~~~~~~~~~~~~~~
 
 ----------------------------
-$ xebin r[un] [--trace=what] [input_file]
+$ xebin r[un] [-c=cpu] [--trace=what] [input_file]
 ----------------------------
 
 The file is loaded into memory of a simple built-in emulator and run: each +INIT+
 routine is called as soon as the block setting it is loaded, and the +RUN+ routine
 is called once the whole file is loaded. Only the first input file is used.
 
-Only the CPU (NMOS 6502) and a few OS entry points are emulated. There is neither OS
+Only the CPU and a few OS entry points are emulated. There is neither OS
 ROM nor any hardware, so this is useful for programs that compute and do character
 I/O, and not for anything that touches ANTIC, POKEY or GTIA.
+
+Option +-c=cpu+ or +--cpu=cpu+ selects the emulated CPU, with the same choices as
+for +disasm+: +6502+ (NMOS, the default), +65c02+, +r65c02+ or +w65c02s+.
 
 +CIOV+ ($E456) is served by the host:
 
@@ -270,7 +273,7 @@ unreleased::
 Added +run+ command, which loads and executes a binary file in a built-in emulator,
 with OS calls served by the host.
 The emulator implements all 65x02 variants (NMOS 6502, 65C02, Rockwell R65C02 and W65C02S)
-with cycle-exact timing; the +run+ command uses the NMOS 6502.
+with cycle-exact timing.
 Added +--trace+ option, which reports what the +run+ command loads, executes
 and asks CIO for.
 Disassembler now creates labels for addresses referenced inside the disassembled code.
