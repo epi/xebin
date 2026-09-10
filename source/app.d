@@ -247,10 +247,18 @@ private void runEmulator(E)(BinaryBlock[] blocks)
 void run(string[] args)
 {
 	auto blocks = BinaryFileReader(InputFiles(args).front).readFile();
-	if (tracing(Trace.cpu))
-		runEmulator!(Emulator!(Cpu.mos_6502, CpuTracer))(blocks);
-	else
-		runEmulator!(Emulator!())(blocks);
+	final switch (cpu)
+	{
+		static foreach (c; EnumMembers!Cpu)
+		{
+		case c:
+			if (tracing(Trace.cpu))
+				runEmulator!(Emulator!(c, CpuTracer))(blocks);
+			else
+				runEmulator!(Emulator!(c))(blocks);
+			return;
+		}
+	}
 }
 
 void printHelp(string[] args)
@@ -268,7 +276,7 @@ void printHelp(string[] args)
 		" i[nsert]  [-n=pos] [-a=ad] [-o=fn] [-v]  insert block into file\n" ~
 		" o[ptimize] [-o=fn] [-i]               optimize file\n +/
 		" d[isasm]  [-c=cpu] [-o=fn]            disassemble blocks\n" ~
-		" r[un]     [--trace=what]              run in a simple emulator\n" ~
+		" r[un]     [-c=cpu] [--trace=what]     run in a simple emulator\n" ~
 		" p[ack]    [-a=ad] [-s] [-o=fn] [-v]   pack using FlashPack algorithm\n" ~
 		" u[npack]  [-o=fn] [-v]                unpack FlashPack'd file\n" ~
 		" h[elp]                                print this message\n" ~
@@ -279,8 +287,8 @@ void printHelp(string[] args)
 		"                          (use '-' for end address)\n" ~
 		" -n|--position=pos        which block to extract (indexed from 0)\n" ~
 		" -r|--raw                 remove header from extracted block\n" ~
-		" -c|--cpu=type            disassemble for the given CPU: 6502 (default),\n" ~
-		"                          65c02, r65c02 or w65c02s\n" ~
+		" -c|--cpu=type            disassemble or run for the given CPU: 6502\n" ~
+		"                          (default), 65c02, r65c02 or w65c02s\n" ~
 //		" -i|--ignore-order        do not preserve order of block if it makes\n" ~
 //		"                          optimized file shorter\n" ~
 //		" -n|--position=pos        set block position for extract, delete, insert\n" ~
