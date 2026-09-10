@@ -908,6 +908,18 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 			case 0xb3: doIndirectY!lax(); break;
 			case 0xb7: doZeroPageIndexed!lax(y); break;
 			case 0xbf: doAbsoluteIndexed!lax(y); break;
+			case 0x1a: case 0x3a: case 0x5a: case 0x7a: case 0xda: case 0xfa:
+				idleFetch(); break;
+			case 0x80: case 0x82: case 0x89: case 0xc2: case 0xe2:
+				doImmediate!nop(); break;
+			case 0x04: case 0x44: case 0x64:
+				doZeroPage!nop(); break;
+			case 0x14: case 0x34: case 0x54: case 0x74: case 0xd4: case 0xf4:
+				doZeroPageIndexed!nop(x); break;
+			case 0x0c:
+				doAbsolute!nop(); break;
+			case 0x1c: case 0x3c: case 0x5c: case 0x7c: case 0xdc: case 0xfc:
+				doAbsoluteIndexed!nop(x); break;
 			}
 			default:
 				throw new Exception(
