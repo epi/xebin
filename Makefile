@@ -52,6 +52,7 @@ test:
 
 singlestep:
 	dub run -b release :singlestep -- -c 6502 -u
+	dub run -b release :singlestep -- -c 6502 -o 83,87,8f,97,a3,a7,af,b3,b7,bf
 	dub run -b release :singlestep -- -c synertek65c02,rockwell65c02,wdc65c02
 
 
