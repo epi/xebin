@@ -237,6 +237,9 @@ enum sbx = q{
 	cflag = ax >= tmp;
 	setNZ(x = cast(ubyte) (ax - tmp));
 };
+enum ane = q{ setNZ(a = (a | magicConstant) & x & @r); };
+enum laxImmediate = q{ setNZ(a = x = (a | magicConstant) & @r); };
+enum las = q{ setNZ(a = x = (sp &= @r)); };
 
 ///
 enum CpuVariant {
@@ -323,6 +326,8 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 	bool stopOnEmptyStackRts = true;
 
 	bool stopped;
+	/// For ANE and LAX #imm. $EE matches SingleStepTests and MOS 6510.
+	ubyte magicConstant = 0xee;
 
 	ubyte a;
 	ubyte x;
@@ -489,6 +494,28 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 		indexPenalty!expr(base, index);
 		const addr = cast(ushort) (base + index);
 		mixin(substOperand(expr, "ld(addr)", "st(addr, ", "modifyCycle(addr, ", "idleRead(addr)"));
+	}
+
+	// SHA/SHX/SHY/TAS
+	// TODO: revisit if RDY is implemented
+	private void unstableStore(ushort base, ubyte index, uint value)
+	{
+		const ushort fixed = cast(ushort) (base + index);
+		idleRead((base & 0xff00) | (fixed & 0xff));
+		const ubyte data = cast(ubyte) (value & ((base >> 8) + 1));
+		const bool crossed = (fixed & 0xff00) != (base & 0xff00);
+		st(crossed ? cast(ushort) ((data << 8) | (fixed & 0xff)) : fixed, data);
+	}
+
+	private void doUnstableStoreAbsoluteIndexed(ubyte index, uint value)
+	{
+		unstableStore(fetchWord(), index, value);
+	}
+
+	private void doUnstableStoreIndirectY(uint value)
+	{
+		const ushort zp = fetchByte();
+		unstableStore(readWord(zp, cast(ushort) ((zp + 1) & 0xff)), y, value);
 	}
 
 	private void doNopAbsolute(bool indexCycle)()
@@ -975,6 +1002,14 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 				fetchByte();
 				jam();
 				return;
+			case 0x8b: doImmediate!ane(); break;
+			case 0xab: doImmediate!laxImmediate(); break;
+			case 0x9f: doUnstableStoreAbsoluteIndexed(y, a & x); break;
+			case 0x93: doUnstableStoreIndirectY(a & x); break;
+			case 0x9e: doUnstableStoreAbsoluteIndexed(y, x); break;
+			case 0x9c: doUnstableStoreAbsoluteIndexed(x, y); break;
+			case 0x9b: sp = a & x; doUnstableStoreAbsoluteIndexed(y, sp); break;
+			case 0xbb: doAbsoluteIndexed!las(y); break;
 			case 0x0b: case 0x2b: doImmediate!anc(); break;
 			case 0x4b: doImmediate!alr(); break;
 			case 0x6b: doImmediate!arr(); break;
@@ -1099,6 +1134,28 @@ unittest
 		assert(!emu.stopped, v.stringof);
 		assert(emu.x == 1, v.stringof);   // both bytes skipped, inx ran
 	}}
+}
+
+unittest
+{
+	debug writeln("unittest magic constant");
+
+	// ANE #$FF with A = 0 and X = $FF leaves exactly the leaked bits in A.
+	static ubyte ane(ubyte magic)
+	{
+		auto emu = new Emulator!(CpuVariant.mos_6502)();
+		emu.magicConstant = magic;
+		emu.ram[0x1000 .. 0x1002] = [ubyte(0x8b), 0xff];
+		emu.pc = 0x1000;
+		emu.a = 0;
+		emu.x = 0xff;
+		emu.instructionLimit = 1;
+		emu.run();
+		return emu.a;
+	}
+	assert(ane(0xee) == 0xee);
+	assert(ane(0xff) == 0xff);
+	assert(ane(0x00) == 0x00);
 }
 
 private version(unittest):
