@@ -184,6 +184,19 @@ unittest
 	assert(tests[0].cycles == [Access(59082, 177, false), Access(40, 160, true)]);
 }
 
+struct BusTrace
+{
+	const(ubyte)[] ram;
+	Access[] accesses;
+
+	void instruction(E)(E emu) {}
+	void fetch(ushort addr, ubyte value) { accesses ~= Access(addr, value, false); }
+	void read(ushort addr, ubyte value) { accesses ~= Access(addr, value, false); }
+	void write(ushort addr, ubyte value) { accesses ~= Access(addr, value, true); }
+	void idle(ushort addr) { accesses ~= Access(addr, ram[addr], false); }
+	void endInstruction() {}
+}
+
 string runOne(E)(E emu, ref const TestCase t)
 {
 	foreach (c; t.initialRam)
@@ -197,6 +210,13 @@ string runOne(E)(E emu, ref const TestCase t)
 	emu.stopped = false;
 	emu.instructions = 0;
 	emu.instructionLimit = 1;
+	emu.observer.accesses.length = 0;
+	emu.observer.accesses.assumeSafeAppend();
+
+	// TODO: What SingleStepTests expect as the idle read address on decimal
+	// correction cycle in ADC/SBC #imm looks suspiciously wrong.
+	// Let's ignore this cycle for now, but check on real hardware some day.
+	bool bcdImmediate = isCmos!(E.cpu) && (emu.p & 0x08) && (emu.ram[emu.pc] & 0x7f) == 0x69;
 
 	string thrown = collectExceptionMsg(emu.run());
 
@@ -215,6 +235,11 @@ string runOne(E)(E emu, ref const TestCase t)
 		if (emu.ram[c.addr] != c.value)
 			problems ~= format("memory: $%04x is $%02x, expected $%02x",
 				c.addr, emu.ram[c.addr], c.value);
+	}
+	if (emu.observer.accesses[0 .. $ - bcdImmediate] != t.cycles[0 .. $ - bcdImmediate])
+	{
+		problems ~= format("cycles: got %d [%(%s, %)]", emu.observer.accesses.length, emu.observer.accesses);
+		problems ~= format("   expected %d [%(%s, %)]", t.cycles.length, t.cycles);
 	}
 
 	emu.ram[] = 0;
@@ -243,16 +268,19 @@ string emitUnittest(CpuVariant v, ref const TestCase t)
 		"\t// %s, opcode $%02x: \"%s\"\n" ~
 		"\tcheckInstruction!(CpuVariant.%s)(\n" ~
 		"\t\t%S, %s,\n" ~
-		"\t\t%S, %s);\n",
+		"\t\t%S, %s,\n" ~
+		"\t\t\"%-(%s  %)\");\n",
 		v, t.cycles.length ? t.cycles[0].value : 0, t.name, v,
 		t.initial, t.initialRam,
-		t.expected, changed);
+		t.expected, changed,
+		t.cycles);
 }
 
 Result runOpcode(CpuVariant v)(string path, ubyte opcode, bool emitUnittests)
 {
 	Result r = { opcode: opcode };
-	auto emu = new Emulator!v();
+	auto emu = new Emulator!(v, BusTrace)();
+	emu.observer.ram = emu.ram;
 	emu.stopOnEmptyStackRts = false;
 
 	auto text = strip(cast(string) read(path));
@@ -265,9 +293,9 @@ Result runOpcode(CpuVariant v)(string path, ubyte opcode, bool emitUnittests)
 		const diag = runOne(emu, t);
 		if (diag !is null) {
 			++r.failed;
-			if (r.reports.length < 5)
+			if (r.reports.length < 2)
 				r.reports ~= diag;
-			if (emitUnittests && r.unittests.length < 5)
+			if (emitUnittests && r.unittests.length < 2)
 				r.unittests ~= emitUnittest(v, t);
 		}
 	}
