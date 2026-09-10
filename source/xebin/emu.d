@@ -196,6 +196,14 @@ enum nop = q{ ubyte discarded = @r; }; // NOPs with fancy addressing modes
 
 enum lax = q{ setNZ(a = x = @r); };
 enum sax = q{ @w(a & x); };
+enum combo(string rmw, string alu) =
+	rmw.replace("tmp", "modified") ~ alu.replace("@r", "modified");
+enum slo = combo!(asl, ora);
+enum rla = combo!(rol, and);
+enum sre = combo!(lsr, eor);
+enum rra = combo!(ror, adc);
+enum dcp = combo!(dec, cmp);
+enum isc = combo!(inc, sbc);
 
 ///
 enum CpuVariant {
@@ -934,6 +942,48 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 				fetchByte();
 				jam();
 				return;
+			case 0x03: doIndirectX!slo(); break;
+			case 0x07: doZeroPage!slo(); break;
+			case 0x0f: doAbsolute!slo(); break;
+			case 0x13: doIndirectY!slo(); break;
+			case 0x17: doZeroPageIndexed!slo(x); break;
+			case 0x1b: doAbsoluteIndexed!slo(y); break;
+			case 0x1f: doAbsoluteIndexed!slo(x); break;
+			case 0x23: doIndirectX!rla(); break;
+			case 0x27: doZeroPage!rla(); break;
+			case 0x2f: doAbsolute!rla(); break;
+			case 0x33: doIndirectY!rla(); break;
+			case 0x37: doZeroPageIndexed!rla(x); break;
+			case 0x3b: doAbsoluteIndexed!rla(y); break;
+			case 0x3f: doAbsoluteIndexed!rla(x); break;
+			case 0x43: doIndirectX!sre(); break;
+			case 0x47: doZeroPage!sre(); break;
+			case 0x4f: doAbsolute!sre(); break;
+			case 0x53: doIndirectY!sre(); break;
+			case 0x57: doZeroPageIndexed!sre(x); break;
+			case 0x5b: doAbsoluteIndexed!sre(y); break;
+			case 0x5f: doAbsoluteIndexed!sre(x); break;
+			case 0x63: doIndirectX!rra(); break;
+			case 0x67: doZeroPage!rra(); break;
+			case 0x6f: doAbsolute!rra(); break;
+			case 0x73: doIndirectY!rra(); break;
+			case 0x77: doZeroPageIndexed!rra(x); break;
+			case 0x7b: doAbsoluteIndexed!rra(y); break;
+			case 0x7f: doAbsoluteIndexed!rra(x); break;
+			case 0xc3: doIndirectX!dcp(); break;
+			case 0xc7: doZeroPage!dcp(); break;
+			case 0xcf: doAbsolute!dcp(); break;
+			case 0xd3: doIndirectY!dcp(); break;
+			case 0xd7: doZeroPageIndexed!dcp(x); break;
+			case 0xdb: doAbsoluteIndexed!dcp(y); break;
+			case 0xdf: doAbsoluteIndexed!dcp(x); break;
+			case 0xe3: doIndirectX!isc(); break;
+			case 0xe7: doZeroPage!isc(); break;
+			case 0xef: doAbsolute!isc(); break;
+			case 0xf3: doIndirectY!isc(); break;
+			case 0xf7: doZeroPageIndexed!isc(x); break;
+			case 0xfb: doAbsoluteIndexed!isc(y); break;
+			case 0xff: doAbsoluteIndexed!isc(x); break;
 			}
 			default:
 				throw new Exception(
