@@ -204,6 +204,39 @@ enum sre = combo!(lsr, eor);
 enum rra = combo!(ror, adc);
 enum dcp = combo!(dec, cmp);
 enum isc = combo!(inc, sbc);
+enum anc = q{ setNZ(a &= @r); cflag = nflag; };
+enum alr = q{ a &= @r; cflag = (a & 1) != 0; setNZ(a >>>= 1); };
+enum arr =
+q{
+	const ubyte anded = a & @r;
+	const ubyte rotated = cast(ubyte) ((anded >>> 1) | (cflag ? 0x80 : 0));
+	if (!dflag)
+	{
+		setNZ(rotated);
+		cflag = (rotated & 0x40) != 0;
+		vflag = ((rotated ^ (rotated << 1)) & 0x40) != 0;
+		a = rotated;
+	}
+	else
+	{
+		nflag = cflag;
+		zflag = rotated == 0;
+		vflag = ((anded ^ rotated) & 0x40) != 0;
+		uint fixed = rotated;
+		if ((anded & 0x0f) + (anded & 0x01) > 0x05)
+			fixed = (fixed & 0xf0) | ((fixed + 0x06) & 0x0f);
+		cflag = (anded & 0xf0) + (anded & 0x10) > 0x50;
+		if (cflag)
+			fixed += 0x60;
+		a = cast(ubyte) fixed;
+	}
+};
+enum sbx = q{
+	const ubyte tmp = @r;
+	const ubyte ax = a & x;
+	cflag = ax >= tmp;
+	setNZ(x = cast(ubyte) (ax - tmp));
+};
 
 ///
 enum CpuVariant {
@@ -942,6 +975,11 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 				fetchByte();
 				jam();
 				return;
+			case 0x0b: case 0x2b: doImmediate!anc(); break;
+			case 0x4b: doImmediate!alr(); break;
+			case 0x6b: doImmediate!arr(); break;
+			case 0xcb: doImmediate!sbx(); break;
+			case 0xeb: doImmediate!sbc(); break;
 			case 0x03: doIndirectX!slo(); break;
 			case 0x07: doZeroPage!slo(); break;
 			case 0x0f: doAbsolute!slo(); break;
