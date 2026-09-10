@@ -27,7 +27,7 @@
 	   distribution.
 */
 
-import std.algorithm : canFind, filter, map;
+import std.algorithm : all, canFind, filter, map;
 import std.array : appender;
 import std.conv : to;
 import std.exception : collectExceptionMsg;
@@ -236,10 +236,21 @@ string runOne(E)(E emu, ref const TestCase t)
 			problems ~= format("memory: $%04x is $%02x, expected $%02x",
 				c.addr, emu.ram[c.addr], c.value);
 	}
-	if (emu.observer.accesses[0 .. $ - bcdImmediate] != t.cycles[0 .. $ - bcdImmediate])
+
+	// A jammed CPU repeats its last bus cycle forever and the suite records
+	// an arbitrary number of those repetitions. The emulator stops after the
+	// first one, so only that prefix is compared, and the rest of the expected
+	// trace must be copies of the cycle it stopped on.
+	const(Access)[] expectedCycles = t.cycles;
+	const(Access)[] got_ = emu.observer.accesses;
+	if (emu.stopped && got_.length && got_.length < t.cycles.length &&
+		t.cycles[got_.length .. $].all!(c => c == got_[$ - 1]))
+		expectedCycles = t.cycles[0 .. got_.length];
+
+	if (emu.observer.accesses[0 .. $ - bcdImmediate] != expectedCycles[0 .. $ - bcdImmediate])
 	{
 		problems ~= format("cycles: got %d [%(%s, %)]", emu.observer.accesses.length, emu.observer.accesses);
-		problems ~= format("   expected %d [%(%s, %)]", t.cycles.length, t.cycles);
+		problems ~= format("   expected %d [%(%s, %)]", expectedCycles.length, expectedCycles);
 	}
 
 	emu.ram[] = 0;

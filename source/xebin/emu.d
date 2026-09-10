@@ -378,6 +378,17 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 		idleRead(0x100 + sp);
 	}
 
+	private void jam()
+	{
+		idleRead(0xffff);
+		idleRead(0xfffe);
+		idleRead(0xfffe);
+		idleRead(0xffff);
+		--pc;
+		stopped = true;
+		observer.endInstruction();
+	}
+
 	private void indexPenalty(string expr)(ushort base, ubyte index)
 	{
 		const ushort fixed = cast(ushort) (base + index);
@@ -595,9 +606,7 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 						static if (isCmos!cpuVariant) {}
 						else
 						{
-							--pc;   // JAM: report the address of the $02 itself
-							stopped = true;
-							observer.endInstruction();
+							jam();
 							return;
 						}
 					}
@@ -920,6 +929,11 @@ class Emulator(CpuVariant cpuVariant = CpuVariant.mos_6502, Observer = NoObserve
 				doAbsolute!nop(); break;
 			case 0x1c: case 0x3c: case 0x5c: case 0x7c: case 0xdc: case 0xfc:
 				doAbsoluteIndexed!nop(x); break;
+			case 0x12: case 0x22: case 0x32: case 0x42: case 0x52: case 0x62:
+			case 0x72: case 0x92: case 0xb2: case 0xd2: case 0xf2:
+				fetchByte();
+				jam();
+				return;
 			}
 			default:
 				throw new Exception(
